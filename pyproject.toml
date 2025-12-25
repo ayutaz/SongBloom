@@ -14,6 +14,7 @@ dependencies = [
     "lightning==2.2.1",
     "nltk==3.8.1",
     "num2words==0.5.13",
+    "numpy<2",
     "omegaconf==2.2.0",
     "pypinyin==0.51.0",
     "spacy==3.7.4",

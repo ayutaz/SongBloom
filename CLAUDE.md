@@ -10,11 +10,16 @@ SongBloomは、自己回帰スケッチと拡散ベースの精緻化を交互�
 
 ## 開発環境のセットアップ
 
+### 初回セットアップ
+
 ```bash
-# uvで依存関係をインストール（Python 3.10-3.12が必要）
+# Python 3.10-3.12 が必要（3.13はPyTorch 2.2.0非対応）
+uv python pin 3.12
+
+# 依存関係のインストール
 uv sync
 
-# 環境変数の設定（実行前に必須）
+# 環境変数の設定（推論実行前に必須）
 source set_env.sh
 ```
 
@@ -23,6 +28,31 @@ source set_env.sh
 ```bash
 uv add <package-name>
 ```
+
+### Mac Silicon (Apple M1/M2/M3) 向け
+
+```bash
+# 環境変数を設定
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+export DISABLE_FLASH_ATTN=1
+
+# 推論実行（float32必須、bfloat16は非対応）
+source set_env.sh
+uv run python infer.py --input-jsonl example/test.jsonl --device mps --dtype float32
+```
+
+### トラブルシューティング
+
+#### Python 3.13 エラー
+PyTorch 2.2.0 は Python 3.13 に対応していません：
+```bash
+uv python pin 3.12
+uv sync
+```
+
+#### NumPy 2.x 互換性エラー
+`numpy.dtype size changed` エラーが出る場合、NumPy 1.x が必要です。
+pyproject.toml には既に `numpy<2` が設定済み。
 
 ## 推論コマンド
 
@@ -35,14 +65,6 @@ uv run python infer.py --input-jsonl example/test.jsonl --dtype bfloat16
 
 # 利用可能なモデル: songbloom_full_150s, songbloom_full_150s_dpo, songbloom_full_240s
 uv run python infer.py --model-name songbloom_full_240s --input-jsonl example/test_240s.jsonl
-```
-
-### Mac Silicon向け
-
-```bash
-export PYTORCH_ENABLE_MPS_FALLBACK=1
-export DISABLE_FLASH_ATTN=1
-# dtype は float32 を使用（bfloat16は非対応）
 ```
 
 ## アーキテクチャ

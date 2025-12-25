@@ -115,6 +115,19 @@ device = torch.device('mps')
 model = SongBloom_Sampler.build_from_trainer(cfg, strict=False, dtype=torch.float32, device=device)
 ```
 
+## Troubleshooting
+
+### Python 3.13 Not Supported
+PyTorch 2.2.0 requires Python 3.10-3.12. If using Python 3.13:
+```bash
+uv python pin 3.12
+uv sync
+```
+
+### NumPy 2.x Compatibility Error
+If you see `numpy.dtype size changed` error, NumPy 1.x is required.
+This is already configured in pyproject.toml with `numpy<2`.
+
 ## Citation
 
 ```

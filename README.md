@@ -45,12 +45,12 @@ Experimental results demonstrate that SongBloom outperforms existing methods acr
 ### Prepare Environments
 
 ```bash
-conda create -n SongBloom python==3.8.12
-conda activate SongBloom
+# Install dependencies (requires Python 3.10-3.12)
+uv sync
 
-# yum install libsndfile
-# pip install torch==2.2.0 torchaudio==2.2.0 --index-url https://download.pytorch.org/whl/cu118 # For different CUDA version
-pip install -r requirements.txt
+# For CUDA support, modify pyproject.toml index URL:
+# [[tool.uv.index]]
+# url = "https://download.pytorch.org/whl/cu118"
 ```
 
 ### Data Preparation
@@ -76,11 +76,10 @@ For details on lyric formatting, see [docs/lyric_format.md](docs/lyric_format.md
 ```bash
 source set_env.sh
 
-python3 infer.py --input-jsonl example/test.jsonl
-
+uv run python infer.py --input-jsonl example/test.jsonl
 
 # For GPUs with low VRAM like RTX4090, you should set the dtype as bfloat16
-python3 infer.py --input-jsonl example/test.jsonl --dtype bfloat16
+uv run python infer.py --input-jsonl example/test.jsonl --dtype bfloat16
 
 # SongBloom also supports flash-attn (optional). To enable it, please install flash-attn (v2.6.3 is used during training) manually and set os.environ['DISABLE_FLASH_ATTN'] = "0" in infer.py:8
 ```
@@ -95,14 +94,21 @@ python3 infer.py --input-jsonl example/test.jsonl --dtype bfloat16
 
 Set these environment variables before running:
 
-```
+```bash
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 export DISABLE_FLASH_ATTN=1
 ```
 
-When loading the model, explicitly pass the MPS device and use float32, not bfloat16:
+Run inference with MPS device and float32 (bfloat16 is not supported on MPS):
 
+```bash
+source set_env.sh
+uv run python infer.py --input-jsonl example/test.jsonl --device mps --dtype float32
 ```
+
+When loading the model programmatically, explicitly pass the MPS device:
+
+```python
 import torch
 
 device = torch.device('mps')

@@ -111,6 +111,23 @@ uv run python -m SongBloom.training.prepare_jacappella \
 
 生成された `data/jacappella_prepared/jacappella.jsonl` を `--data-jsonl` に指定してください。
 
+### MuQ + VQ のコードブック学習
+
+SongBloomの精度を上げるには、MuQ埋め込み用の VQコードブック（16384）が必要です。
+以下で VQ 重みを学習し、`--muq-vq-path` に指定してください。
+
+```bash
+uv run python -m SongBloom.training.train_vq \
+  --data-jsonl data/jacappella_prepared/jacappella.jsonl \
+  --output-path data/vq/vq_16384.pt \
+  --steps 200 \
+  --batch-size 2 \
+  --device cpu
+```
+
+※ MuQ の前処理で複素数演算が発生するため、MPS ではエラーになることがあります。
+その場合は `--device cpu` を指定してください。
+
 ## 追加したコード
 
 - `SongBloom/training/dataset.py` : 学習データセット + キャッシュ

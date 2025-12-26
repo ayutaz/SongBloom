@@ -66,7 +66,10 @@ def _iter_musicxml(root_dir: str, subset_filters: Optional[Iterable[str]], music
 
 
 def _extract_lyrics(xml_path: str) -> str:
-    tree = ET.parse(xml_path)
+    try:
+        tree = ET.parse(xml_path)
+    except ET.ParseError:
+        return ""
     root = tree.getroot()
     texts: List[str] = []
     for lyric in root.iter():
@@ -87,10 +90,10 @@ def _extract_lyrics(xml_path: str) -> str:
     return raw.strip(".")
 
 
-def _build_lyrics(xml_path: str) -> str:
+def _build_lyrics(xml_path: str) -> Optional[str]:
     text = _extract_lyrics(xml_path)
     if not text:
-        return "[verse]"
+        return None
     return f"[verse] {text}."
 
 
@@ -142,6 +145,7 @@ def prepare_jacappella(
     sample_rate: int,
     overwrite: bool,
     no_download: bool,
+    skip_empty_lyrics: bool,
 ) -> str:
     os.makedirs(output_dir, exist_ok=True)
     if not no_download:
@@ -157,6 +161,7 @@ def prepare_jacappella(
     jsonl_path = os.path.join(output_dir, "jacappella.jsonl")
 
     items = []
+    skipped = 0
     for xml_path in xml_paths:
         song_dir = _infer_song_dir(xml_path)
         subset = _infer_subset(dataset_root, song_dir) or "unknown"
@@ -172,6 +177,11 @@ def prepare_jacappella(
             _make_prompt(audio_path, prompt_path, prompt_sec, sample_rate)
 
         lyrics = _build_lyrics(xml_path)
+        if lyrics is None and skip_empty_lyrics:
+            skipped += 1
+            continue
+        if lyrics is None:
+            lyrics = "[verse]"
         items.append(
             {
                 "idx": idx,
@@ -185,6 +195,8 @@ def prepare_jacappella(
         for item in items:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
+    if skipped:
+        print(f"skipped {skipped} files due to empty/invalid lyrics")
     return jsonl_path
 
 
@@ -199,6 +211,7 @@ def main() -> None:
     parser.add_argument("--sample-rate", type=int, default=48000)
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--no-download", action="store_true")
+    parser.add_argument("--skip-empty-lyrics", action="store_true", default=True)
     args = parser.parse_args()
 
     subsets = [s.strip() for s in args.subsets.split(",") if s.strip()] if args.subsets else None
@@ -212,6 +225,7 @@ def main() -> None:
         sample_rate=args.sample_rate,
         overwrite=args.overwrite,
         no_download=args.no_download,
+        skip_empty_lyrics=args.skip_empty_lyrics,
     )
     print(f"wrote jsonl -> {jsonl_path}")
 

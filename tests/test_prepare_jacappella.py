@@ -62,6 +62,7 @@ class TestPrepareJaCappella(unittest.TestCase):
                 sample_rate=8000,
                 overwrite=True,
                 no_download=True,
+                skip_empty_lyrics=True,
             )
 
             self.assertTrue(os.path.exists(jsonl_path))

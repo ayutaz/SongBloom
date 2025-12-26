@@ -6,6 +6,17 @@
 * Lyric text should use a period (".") to separate sentences and a comma (",") to separate different sections, appearing only at the end of vocal or non-vocal sections (please double-check this carefully!).
 * The lyrics must include at least one vocal section, and the total song length should be around 2 minutes.
 
+### Notes for training/inference in this repository
+
+- The same format is used for both inference (`infer.py`) and training (`train_japanese.py`).
+- Lyrics can be normalized or converted to phonemes depending on flags:
+  - `--process-lyrics` enables dataset-side G2P conversion.
+  - `clean_lyrics` can normalize punctuation (see `normalize_lyrics.py`).
+- For duration control:
+  - **150s models**: each non-vocal tag ≈ 1 second.
+  - **240s models**: each non-vocal tag ≈ 5 seconds.
+  (See `docs/training_data_format.md` for details.)
+
 
 
 (CN)

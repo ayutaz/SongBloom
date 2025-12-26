@@ -81,6 +81,9 @@ uv run python infer.py --input-jsonl example/test.jsonl
 # For GPUs with low VRAM like RTX4090, you should set the dtype as bfloat16
 uv run python infer.py --input-jsonl example/test.jsonl --dtype bfloat16
 
+# Output WAV or MP3 (MP3 requires FFmpeg backend in torchaudio)
+uv run python infer.py --input-jsonl example/test.jsonl --output-format wav
+
 # SongBloom also supports flash-attn (optional). To enable it, please install flash-attn (v2.6.3 is used during training) manually and set os.environ['DISABLE_FLASH_ATTN'] = "0" in infer.py:8
 ```
 
@@ -89,6 +92,7 @@ uv run python infer.py --input-jsonl example/test.jsonl --dtype bfloat16
 - input-jsonl: input raw data;
 - output-dir: Dir where the output audio saved;
 - n-samples: How many audios will be generated for each input term;
+- output-format: Audio output format (flac/wav/mp3; mp3 requires FFmpeg backend);
 
 ## Mac Silicon
 

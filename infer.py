@@ -63,6 +63,7 @@ def main():
     parser.add_argument("--input-jsonl", type=str, required=True)
     parser.add_argument("--output-dir", type=str, default="./output")
     parser.add_argument("--n-samples", type=int, default=2)
+    parser.add_argument("--output-format", type=str, default="flac", choices=["flac", "wav", "mp3"])
     parser.add_argument("--dtype", type=str, default='float32', choices=['float32', 'bfloat16']) # There appear to be some bugs in FP16
     parser.add_argument("--device", type=str, default='cuda:0' ) # "cpu"
     args = parser.parse_args()
@@ -95,7 +96,10 @@ def main():
         # breakpoint()
         for i in range(args.n_samples):
             wav = model.generate(lyrics, prompt_wav)
-            torchaudio.save(f'{args.output_dir}/{idx}_s{i}.flac', wav[0].cpu().float(), model.sample_rate)
+            if args.output_format == "mp3" and "ffmpeg" not in torchaudio.list_audio_backends():
+                print("Warning: mp3 output may require FFmpeg backend (torchaudio.set_audio_backend('ffmpeg')).")
+            out_path = f"{args.output_dir}/{idx}_s{i}.{args.output_format}"
+            torchaudio.save(out_path, wav[0].cpu().float(), model.sample_rate, format=args.output_format)
 
 
 if __name__ == "__main__":

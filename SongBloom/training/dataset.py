@@ -1,16 +1,17 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TYPE_CHECKING
 
 import torch
-import torchaudio
 from torch.utils.data import Dataset
 
 from .sketch import PrecomputedSketchExtractor, SketchExtractor
-from ..models.vae_frontend import StableVAE
 from ..g2p.lyric_common import key2processor
 from normalize_lyrics import clean_lyrics
+
+if TYPE_CHECKING:
+    from ..models.vae_frontend import StableVAE
 
 
 @dataclass
@@ -33,10 +34,17 @@ def _load_jsonl(path: str) -> List[dict]:
         return [json.loads(line) for line in f if line.strip()]
 
 
+def _lazy_torchaudio():
+    import torchaudio
+
+    return torchaudio
+
+
 def _resample_if_needed(wav: torch.Tensor, sr: int, target_sr: int) -> torch.Tensor:
     if sr == target_sr:
         return wav
-    return torchaudio.functional.resample(wav, sr, target_sr)
+    ta = _lazy_torchaudio()
+    return ta.functional.resample(wav, sr, target_sr)
 
 
 def _crop_wav(wav: torch.Tensor, sample_rate: int, max_duration: Optional[float], strategy: str) -> torch.Tensor:
@@ -81,7 +89,7 @@ class SongBloomTrainDataset(Dataset):
     def __init__(
         self,
         cfg: DatasetConfig,
-        vae: StableVAE,
+        vae: "StableVAE",
         block_size: int,
         sketch_extractor: Optional[SketchExtractor] = None,
     ):
@@ -104,13 +112,15 @@ class SongBloomTrainDataset(Dataset):
         return os.path.join(self.cfg.cache_dir, f"{idx}.pt")
 
     def _load_audio(self, path: str) -> torch.Tensor:
-        wav, sr = torchaudio.load(path)
+        ta = _lazy_torchaudio()
+        wav, sr = ta.load(path)
         wav = _resample_if_needed(wav, sr, self.cfg.sample_rate)
         wav = _crop_wav(wav, self.cfg.sample_rate, self.cfg.max_duration, self.cfg.segment_strategy)
         return wav
 
     def _load_prompt(self, path: str) -> torch.Tensor:
-        wav, sr = torchaudio.load(path)
+        ta = _lazy_torchaudio()
+        wav, sr = ta.load(path)
         wav = _resample_if_needed(wav, sr, self.cfg.sample_rate)
         wav = _to_mono(wav)
         wav = _pad_or_trim_prompt(wav, self.cfg.sample_rate, self.cfg.prompt_len)

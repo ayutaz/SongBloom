@@ -10,6 +10,7 @@ import random
 from omegaconf import OmegaConf
 import copy
 import lightning as pl
+import math
 
 import os, sys
 
@@ -50,7 +51,143 @@ class SongBloom_PL(pl.LightningModule):
         
         self.model = MVSA_DiTAR(**model_cfg)
         # print(self.model)
-        
+
+        train_cfg = getattr(cfg, "train", None)
+        dataset_cfg = getattr(cfg, "train_dataset", None)
+        self.lyric_processor_key = getattr(dataset_cfg, "lyric_processor", None) if dataset_cfg is not None else None
+        self.lyric_processor = key2processor.get(self.lyric_processor_key) if self.lyric_processor_key else None
+        self.text_key = getattr(dataset_cfg, "text_key", "lyrics") if dataset_cfg is not None else "lyrics"
+        self.wav_key = getattr(dataset_cfg, "wav_key", "prompt_wav") if dataset_cfg is not None else "prompt_wav"
+
+        self.lambda_flow = getattr(train_cfg, "lambda_flow", 0.1) if train_cfg is not None else 0.1
+        self.lr = getattr(train_cfg, "lr", 1e-4) if train_cfg is not None else 1e-4
+        self.weight_decay = getattr(train_cfg, "weight_decay", 0.01) if train_cfg is not None else 0.01
+        self.warmup_steps = getattr(train_cfg, "warmup_steps", 0) if train_cfg is not None else 0
+        self.max_steps = getattr(train_cfg, "max_steps", None) if train_cfg is not None else None
+
+    def _process_lyric(self, input_lyric: str) -> str:
+        if self.lyric_processor_key == 'pinyin' and self.lyric_processor is not None:
+            return self.lyric_processor(input_lyric)
+        if self.lyric_processor is None:
+            return input_lyric
+        processed = []
+        parts = input_lyric.split(" ")
+        for ii in range(len(parts)):
+            if parts[ii] not in symbols and parts[ii] not in LABELS.keys() and len(parts[ii]) > 0:
+                parts[ii] = self.lyric_processor(parts[ii])
+        processed = " ".join(parts)
+        return processed
+
+    def _build_condition_tensors(self, lyrics, prompt_wav: torch.Tensor):
+        device = prompt_wav.device if prompt_wav is not None else self.device
+        text_keys = self.model.condition_provider.text_conditions
+        wav_keys = self.model.condition_provider.wav_conditions
+        joint_keys = self.model.condition_provider.joint_embed_conditions
+
+        attributes = []
+        for i in range(len(lyrics)):
+            attr = ConditioningAttributes()
+            for key in text_keys:
+                if key == self.text_key:
+                    attr.text[key] = self._process_lyric(lyrics[i])
+                else:
+                    attr.text[key] = None
+            for key in wav_keys:
+                if key == self.wav_key and prompt_wav is not None:
+                    wav = prompt_wav[i]
+                    if wav.ndim == 2:
+                        wav = wav.unsqueeze(0)
+                    attr.wav[key] = WavCondition(
+                        wav.to(device=device),
+                        torch.tensor([wav.shape[-1]], device=device).long(),
+                        sample_rate=[self.vae.sample_rate],
+                        path=[None],
+                    )
+                else:
+                    zero = torch.zeros((1, 1, 1), device=device)
+                    attr.wav[key] = WavCondition(
+                        zero,
+                        torch.tensor([0], device=device).long(),
+                        sample_rate=[self.vae.sample_rate],
+                        path=[None],
+                    )
+            for key in joint_keys:
+                zero = torch.zeros((1, 1, 1), device=device)
+                attr.joint_embed[key] = JointEmbedCondition(
+                    zero,
+                    [None],
+                    torch.tensor([0], device=device).long(),
+                    sample_rate=[self.vae.sample_rate],
+                    path=[None],
+                )
+            attributes.append(attr)
+
+        tokenized = self.model.condition_provider.tokenize(attributes)
+        return self.model.condition_provider(tokenized)
+
+    def training_step(self, batch, batch_idx):
+        x_latent = batch["audio_latent"].to(self.device)
+        x_sketch = batch["sketch_tokens"].to(self.device)
+        x_len = batch["lengths"].to(self.device)
+        prompt_wav = batch["prompt_wav"].to(self.device)
+        lyrics = batch["lyrics"]
+
+        condition_tensors = self._build_condition_tensors(lyrics, prompt_wav)
+        output = self.model(x_sketch, x_latent, x_len, condition_tensors)
+
+        ar_logit = output.ar_logit.reshape(-1, output.ar_logit.shape[-1])
+        ar_target = output.ar_target.reshape(-1)
+        ar_loss = F.cross_entropy(ar_logit, ar_target, ignore_index=self.model.special_token_id)
+        flow_loss = F.mse_loss(output.nar_pred, output.nar_target)
+        loss = ar_loss + self.lambda_flow * flow_loss
+
+        self.log("train/loss", loss, prog_bar=True)
+        self.log("train/ar_loss", ar_loss, prog_bar=False)
+        self.log("train/flow_loss", flow_loss, prog_bar=False)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x_latent = batch["audio_latent"].to(self.device)
+        x_sketch = batch["sketch_tokens"].to(self.device)
+        x_len = batch["lengths"].to(self.device)
+        prompt_wav = batch["prompt_wav"].to(self.device)
+        lyrics = batch["lyrics"]
+
+        condition_tensors = self._build_condition_tensors(lyrics, prompt_wav)
+        output = self.model(x_sketch, x_latent, x_len, condition_tensors)
+
+        ar_logit = output.ar_logit.reshape(-1, output.ar_logit.shape[-1])
+        ar_target = output.ar_target.reshape(-1)
+        ar_loss = F.cross_entropy(ar_logit, ar_target, ignore_index=self.model.special_token_id)
+        flow_loss = F.mse_loss(output.nar_pred, output.nar_target)
+        loss = ar_loss + self.lambda_flow * flow_loss
+
+        self.log("val/loss", loss, prog_bar=True)
+        self.log("val/ar_loss", ar_loss, prog_bar=False)
+        self.log("val/flow_loss", flow_loss, prog_bar=False)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        if self.warmup_steps and self.max_steps:
+            def lr_lambda(step):
+                if step < self.warmup_steps:
+                    return float(step) / float(max(1, self.warmup_steps))
+                if self.max_steps is None or self.max_steps <= self.warmup_steps:
+                    return 1.0
+                progress = (step - self.warmup_steps) / float(max(1, self.max_steps - self.warmup_steps))
+                return max(0.0, 0.5 * (1.0 + math.cos(math.pi * progress)))
+
+            scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": scheduler,
+                    "interval": "step",
+                },
+            }
+        return optimizer
+
 
 
 
@@ -228,4 +365,3 @@ class SongBloom_Sampler:
             prompt_tokens = None
 
         return attributes, prompt_tokens
-

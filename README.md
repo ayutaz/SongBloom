@@ -128,6 +128,20 @@ uv sync
 If you see `numpy.dtype size changed` error, NumPy 1.x is required.
 This is already configured in pyproject.toml with `numpy<2`.
 
+## Code Quality
+
+Ruff is configured via `pyproject.toml`.
+To lint:
+
+```bash
+ruff check .
+```
+
+## Training (Fine-tuning)
+
+This repository now includes a minimal training pipeline (Lightning) aimed at Japanese fine-tuning.
+See `docs/training_code.md` for details, JSONL format, and required sketch tokens.
+
 ## Citation
 
 ```

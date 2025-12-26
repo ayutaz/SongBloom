@@ -16,6 +16,7 @@ dependencies = [
     "num2words==0.5.13",
     "numpy<2",
     "omegaconf==2.2.0",
+    "pyopenjtalk-plus>=0.4.1.post7",
     "pypinyin==0.51.0",
     "spacy==3.7.4",
     "torch==2.2.0",

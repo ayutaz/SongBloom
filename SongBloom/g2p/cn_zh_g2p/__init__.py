@@ -1,7 +1,7 @@
-from . import chinese,  english # , japanese 暂时干掉看看
+from . import chinese, english, japanese
 from .symbols import *
 import yaml
-language_module_map = {"zh": chinese, "en": english} #, "ja": japanese
+language_module_map = {"zh": chinese, "en": english, "ja": japanese}
 
 def is_chinese(uchar):
     if uchar >= u'\u4e00' and uchar <= u'\u9fa5':
@@ -22,45 +22,62 @@ import re
 #     return chinese_text, english_text
 
 def split_text(text):
-    pattern = re.compile("|".join(re.escape(p) for p in chinese.rep_map.keys()))
-    text = pattern.sub(lambda x: chinese.rep_map[x.group()], text)
+    # Merge punctuation replacement maps from all languages
+    all_rep_map = {**chinese.rep_map}
+    if hasattr(japanese, 'rep_map'):
+        all_rep_map.update(japanese.rep_map)
+
+    pattern = re.compile("|".join(re.escape(p) for p in all_rep_map.keys()))
+    text = pattern.sub(lambda x: all_rep_map[x.group()], text)
 
     result = []
     lang = []
     buffer = ""
+    # Chinese characters (CJK Unified Ideographs)
     chinese_pattern = r'[\u4e00-\u9fa5]'
+    # Japanese hiragana and katakana (unique to Japanese)
+    japanese_pattern = r'[\u3040-\u309F\u30A0-\u30FF]'
+    # CJK characters that could be Chinese or Japanese
+    cjk_pattern = r'[\u4e00-\u9fa5\u3040-\u309F\u30A0-\u30FF]'
     special_pattern = r'[\,\.\!\?\…\-]'
-    # TODO check 一下
+
+    def detect_lang(text_segment):
+        """Detect language of a text segment."""
+        # If contains hiragana/katakana, it's Japanese
+        if re.search(japanese_pattern, text_segment):
+            return 'ja'
+        # If contains Chinese characters only, it's Chinese
+        if re.search(chinese_pattern, text_segment):
+            return 'zh'
+        # Otherwise it's English
+        return 'en'
+
     for char in text:
         if re.match(special_pattern, char):
             if buffer:
-                if not re.match(chinese_pattern, buffer[0]):
-                    result.append(buffer)
-                    lang.append('en')
-                else:
-                    result.append(buffer)
-                    lang.append("zh")
+                result.append(buffer)
+                lang.append(detect_lang(buffer))
             result.append(char)
             lang.append('sp')
             buffer = ""
-
-        
-        elif re.match(chinese_pattern, char):
-            if buffer and not re.match(chinese_pattern, buffer[-1]):
+        elif re.match(cjk_pattern, char):
+            # CJK character (Chinese or Japanese)
+            if buffer and not re.match(cjk_pattern, buffer[-1]):
                 result.append(buffer)
+                lang.append(detect_lang(buffer))
                 buffer = ""
-                lang.append('en')
             buffer += char
         else:
-            if buffer and re.match(chinese_pattern, buffer[-1]):
+            # Non-CJK character (likely English/ASCII)
+            if buffer and re.match(cjk_pattern, buffer[-1]):
                 result.append(buffer)
+                lang.append(detect_lang(buffer))
                 buffer = ""
-                lang.append("zh")
             buffer += char
 
     if buffer:
         result.append(buffer)
-        lang.append("zh" if re.match(chinese_pattern, buffer[-1]) else 'en')
+        lang.append(detect_lang(buffer))
 
     return result, lang
 

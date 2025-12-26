@@ -133,7 +133,7 @@ class SongBloomTrainDataset(Dataset):
             return lyrics
         return self._lyric_processor(lyrics)
 
-    def _load_sketch_tokens(self, item: dict, wav: torch.Tensor) -> torch.Tensor:
+    def _load_sketch_tokens(self, item: dict, wav: torch.Tensor, target_length: Optional[int]) -> torch.Tensor:
         if "sketch_tokens" in item:
             tokens = torch.as_tensor(item["sketch_tokens"], dtype=torch.long)
             return tokens.reshape(-1)
@@ -141,7 +141,7 @@ class SongBloomTrainDataset(Dataset):
             extractor = PrecomputedSketchExtractor()
             return extractor.extract_from_item(item)
         # external extractor path
-        return self.sketch_extractor.extract(wav, self.cfg.sample_rate)
+        return self.sketch_extractor.extract(wav, self.cfg.sample_rate, target_length=target_length)
 
     def __getitem__(self, index: int) -> dict:
         item = self.items[index]
@@ -165,7 +165,7 @@ class SongBloomTrainDataset(Dataset):
         with torch.no_grad():
             audio_latent = self.vae.encode(audio.unsqueeze(0)).squeeze(0)  # [D, T]
 
-        sketch_tokens = self._load_sketch_tokens(item, audio)
+        sketch_tokens = self._load_sketch_tokens(item, audio, target_length=audio_latent.shape[-1])
 
         # align lengths
         min_len = min(audio_latent.shape[-1], sketch_tokens.shape[-1])

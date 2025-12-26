@@ -12,6 +12,7 @@ SongBloomの学習には **MuQ + VQ によるスケッチトークン** が必�
 - `SongBloom/training/sketch.py` を自分のMuQパイプラインで実装する
 
 現在の実装は `sketch_path` で読み込む方式を標準としています。
+MuQを使って自動抽出する場合は `--sketch-mode muq` を指定してください（下記）。
 
 ## JSONLフォーマット（学習）
 
@@ -36,6 +37,7 @@ source set_env.sh
 uv run python train_japanese.py \
   --model-name songbloom_full_150s \
   --data-jsonl data/japanese_songs.jsonl \
+  --val-split 0.05 \
   --output-dir checkpoints \
   --batch-size 1 \
   --accumulate-grad-batches 8 \
@@ -52,6 +54,18 @@ uv run python train_japanese.py \
 - `--segment-strategy start|random` : 長尺音声の切り出し方法
 - `--process-lyrics` : データセット側で G2P 変換
   - デフォルトは **学習モジュール側で変換**（推奨）
+- `--val-jsonl` / `--val-split` : 検証データの指定
+- `--resume-from` : チェックポイントから再開
+
+### JSONL分割ユーティリティ
+
+```bash
+uv run python -m SongBloom.training.split_jsonl \
+  --input-jsonl data/japanese_songs.jsonl \
+  --train-jsonl data/japanese_songs_train.jsonl \
+  --val-jsonl data/japanese_songs_val.jsonl \
+  --val-ratio 0.05
+```
 
 ## 追加したコード
 
@@ -61,8 +75,14 @@ uv run python train_japanese.py \
 
 ## MuQを使ってスケッチを計算したい場合
 
-`SongBloom/training/sketch.py` の `ExternalSketchExtractor` を実装し、
-`SongBloomTrainDataset` に渡してください。
+`--sketch-mode muq` を指定すると、MuQ + VQ でスケッチトークンを生成します。
+MuQは別途インストールが必要です。
+
+```bash
+pip install muq
+```
+
+必要に応じて `--muq-vq-path` に VQ の事前学習済み重みを指定してください。
 MuQの出力は 25fps を想定し、VQ後のトークン長が VAE latent と合うように調整してください。
 
 ---

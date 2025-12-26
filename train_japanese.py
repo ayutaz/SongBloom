@@ -8,6 +8,8 @@ from huggingface_hub import hf_hub_download
 from SongBloom.models.songbloom.songbloom_pl import SongBloom_PL
 from SongBloom.models.vae_frontend import StableVAE
 from SongBloom.training.dataset import DatasetConfig, SongBloomTrainDataset, collate_training_batch
+from SongBloom.training.sketch import ExternalSketchExtractor
+from SongBloom.training.split_jsonl import split_items, load_jsonl, write_jsonl
 
 NAME2REPO = {
     "songbloom_full_150s": "CypressYang/SongBloom",
@@ -78,11 +80,33 @@ def build_dataset_cfg(args, cfg) -> DatasetConfig:
     )
 
 
+def maybe_split_jsonl(args) -> tuple[str, str | None]:
+    if args.val_jsonl:
+        return args.data_jsonl, args.val_jsonl
+    if args.val_split <= 0:
+        return args.data_jsonl, None
+
+    os.makedirs(args.output_dir, exist_ok=True)
+    train_jsonl = os.path.join(args.output_dir, "train_split.jsonl")
+    val_jsonl = os.path.join(args.output_dir, "val_split.jsonl")
+
+    if args.overwrite_split or not (os.path.exists(train_jsonl) and os.path.exists(val_jsonl)):
+        items = load_jsonl(args.data_jsonl)
+        train_items, val_items = split_items(items, args.val_split, args.split_seed)
+        write_jsonl(train_jsonl, train_items)
+        write_jsonl(val_jsonl, val_items)
+    return train_jsonl, val_jsonl
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-name", type=str, default="songbloom_full_150s")
     parser.add_argument("--local-dir", type=str, default="./cache")
     parser.add_argument("--data-jsonl", type=str, required=True)
+    parser.add_argument("--val-jsonl", type=str, default=None)
+    parser.add_argument("--val-split", type=float, default=0.0)
+    parser.add_argument("--split-seed", type=int, default=1234)
+    parser.add_argument("--overwrite-split", action="store_true")
     parser.add_argument("--output-dir", type=str, default="./checkpoints")
 
     parser.add_argument("--batch-size", type=int, default=1)
@@ -109,7 +133,19 @@ def main():
     parser.add_argument("--lyric-processor", type=str, default="phoneme")
 
     parser.add_argument("--init-from-pretrained", action="store_true")
+    parser.add_argument("--resume-from", type=str, default=None)
     parser.add_argument("--seed", type=int, default=1234)
+
+    parser.add_argument("--sketch-mode", type=str, default="precomputed", choices=["precomputed", "muq"])
+    parser.add_argument("--muq-model-id", type=str, default="OpenMuQ/MuQ-large-msd-iter")
+    parser.add_argument("--muq-device", type=str, default="cpu")
+    parser.add_argument("--muq-sr", type=int, default=24000)
+    parser.add_argument("--muq-embed-dim", type=int, default=1024)
+    parser.add_argument("--muq-codebook-size", type=int, default=16384)
+    parser.add_argument("--muq-vq-path", type=str, default=None)
+    parser.add_argument("--muq-vq-decay", type=float, default=0.99)
+    parser.add_argument("--muq-commitment-weight", type=float, default=1.0)
+    parser.add_argument("--muq-freeze-codebook", action="store_true")
 
     args = parser.parse_args()
 
@@ -134,8 +170,23 @@ def main():
     preprocess_vae = StableVAE(cfg.vae.vae_ckpt, cfg.vae.vae_cfg, sr=cfg.sr)
     preprocess_vae.eval()
 
+    train_jsonl, val_jsonl = maybe_split_jsonl(args)
+    args.data_jsonl = train_jsonl
     dataset_cfg = build_dataset_cfg(args, cfg)
+
     sketch_extractor = None
+    if args.sketch_mode == "muq":
+        sketch_extractor = ExternalSketchExtractor(
+            model_id=args.muq_model_id,
+            device=args.muq_device,
+            sample_rate=args.muq_sr,
+            embedding_dim=args.muq_embed_dim,
+            codebook_size=args.muq_codebook_size,
+            vq_path=args.muq_vq_path,
+            vq_decay=args.muq_vq_decay,
+            commitment_weight=args.muq_commitment_weight,
+            freeze_codebook=args.muq_freeze_codebook,
+        )
     if not args.process_lyrics:
         # lyrics are processed in the LightningModule
         dataset_cfg.process_lyrics = False
@@ -157,6 +208,24 @@ def main():
         collate_fn=collate_training_batch,
         pin_memory=args.device.startswith("cuda"),
     )
+    val_loader = None
+    if val_jsonl:
+        val_cfg = build_dataset_cfg(args, cfg)
+        val_cfg.jsonl_path = val_jsonl
+        val_dataset = SongBloomTrainDataset(
+            val_cfg,
+            vae=preprocess_vae,
+            block_size=cfg.model.block_size,
+            sketch_extractor=sketch_extractor,
+        )
+        val_loader = torch.utils.data.DataLoader(
+            val_dataset,
+            batch_size=args.batch_size,
+            shuffle=False,
+            num_workers=args.num_workers,
+            collate_fn=collate_training_batch,
+            pin_memory=args.device.startswith("cuda"),
+        )
 
     model = SongBloom_PL(cfg)
     if args.init_from_pretrained:
@@ -189,7 +258,7 @@ def main():
         log_every_n_steps=10,
     )
 
-    trainer.fit(model, dataloader)
+    trainer.fit(model, dataloader, val_dataloaders=val_loader, ckpt_path=args.resume_from)
 
 
 if __name__ == "__main__":

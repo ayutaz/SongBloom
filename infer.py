@@ -6,8 +6,9 @@ from omegaconf import MISSING, OmegaConf,DictConfig
 from huggingface_hub import hf_hub_download
 
 os.environ['DISABLE_FLASH_ATTN'] = "1"
-from SongBloom.models.songbloom.songbloom_pl import SongBloom_Sampler
+from SongBloom.models.songbloom.songbloom_pl import SongBloom_PL, SongBloom_Sampler
 from normalize_lyrics import clean_lyrics
+from SongBloom.training.lora import inject_lora
 
 NAME2REPO = {
     "songbloom_full_150s" : "CypressYang/SongBloom",
@@ -60,23 +61,61 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-name", type=str, default="songbloom_full_150s")
     parser.add_argument("--local-dir", type=str, default="./cache")
+    parser.add_argument("--ckpt-path", type=str, default=None)
     parser.add_argument("--input-jsonl", type=str, required=True)
     parser.add_argument("--output-dir", type=str, default="./output")
     parser.add_argument("--n-samples", type=int, default=2)
     parser.add_argument("--output-format", type=str, default="flac", choices=["flac", "wav", "mp3"])
     parser.add_argument("--dtype", type=str, default='float32', choices=['float32', 'bfloat16']) # There appear to be some bugs in FP16
     parser.add_argument("--device", type=str, default='cuda:0' ) # "cpu"
+    parser.add_argument("--max-duration", type=float, default=None)
+    parser.add_argument("--use-lora", action="store_true")
+    parser.add_argument("--lora-rank", type=int, default=16)
+    parser.add_argument("--lora-alpha", type=int, default=32)
+    parser.add_argument("--lora-dropout", type=float, default=0.05)
+    parser.add_argument(
+        "--lora-target-modules",
+        type=str,
+        default="q_proj,v_proj,to_q,to_kv,to_qkv",
+    )
     args = parser.parse_args()
 
     hf_download(args.model_name, args.local_dir)
     cfg = load_config(f"{args.local_dir}/{args.model_name}.yaml", parent_dir=args.local_dir)
   
     cfg.max_dur = cfg.max_dur + 10
+    if args.max_duration is not None:
+        cfg.max_dur = args.max_duration
     
     dtype = getattr(torch, args.dtype)
     device = torch.device(args.device)
-    model = SongBloom_Sampler.build_from_trainer(cfg, strict=False, dtype=dtype, device=device)
+    if args.ckpt_path:
+        model_light = SongBloom_PL(cfg)
+        if args.use_lora:
+            target_modules = [t.strip() for t in args.lora_target_modules.split(",") if t.strip()]
+            inject_lora(
+                model_light.model,
+                target_modules=target_modules,
+                r=args.lora_rank,
+                alpha=args.lora_alpha,
+                dropout=args.lora_dropout,
+            )
+        ckpt = torch.load(args.ckpt_path, map_location="cpu")
+        state_dict = ckpt.get("state_dict", ckpt)
+        missing, unexpected = model_light.load_state_dict(state_dict, strict=False)
+        print(f"Loaded checkpoint. Missing={len(missing)} Unexpected={len(unexpected)}")
+        model_light = model_light.eval().to(device)
+        model = SongBloom_Sampler(
+            compression_model=model_light.vae,
+            diffusion=model_light.model.to(dtype=dtype),
+            lyric_processor_key=cfg.train_dataset.lyric_processor,
+            max_duration=cfg.max_dur,
+            prompt_duration=cfg.sr * cfg.train_dataset.prompt_len,
+        )
+    else:
+        model = SongBloom_Sampler.build_from_trainer(cfg, strict=False, dtype=dtype, device=device)
     model.set_generation_params(**cfg.inference)
+    model.set_generation_params(max_frames=int(cfg.max_dur * 25))
           
     os.makedirs(args.output_dir, exist_ok=True)
     

@@ -84,6 +84,11 @@ uv run python infer.py --input-jsonl example/test.jsonl --dtype bfloat16
 # Output WAV or MP3 (MP3 requires FFmpeg backend in torchaudio)
 uv run python infer.py --input-jsonl example/test.jsonl --output-format wav
 
+# Use a fine-tuned Lightning checkpoint (LoRA optional)
+uv run python infer.py --input-jsonl example/test.jsonl \
+  --ckpt-path checkpoints/jacappella_muq_lora/last.ckpt \
+  --use-lora
+
 # SongBloom also supports flash-attn (optional). To enable it, please install flash-attn (v2.6.3 is used during training) manually and set os.environ['DISABLE_FLASH_ATTN'] = "0" in infer.py:8
 ```
 
@@ -93,6 +98,8 @@ uv run python infer.py --input-jsonl example/test.jsonl --output-format wav
 - output-dir: Dir where the output audio saved;
 - n-samples: How many audios will be generated for each input term;
 - output-format: Audio output format (flac/wav/mp3; mp3 requires FFmpeg backend);
+- ckpt-path: Use a fine-tuned Lightning checkpoint instead of the base model;
+- use-lora: Enable LoRA modules when loading a fine-tuned checkpoint;
 
 ## Mac Silicon
 

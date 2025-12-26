@@ -3,6 +3,7 @@ import os
 import torch
 import lightning as pl
 from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.callbacks import ModelCheckpoint
 from omegaconf import OmegaConf, DictConfig
 from huggingface_hub import hf_hub_download
 
@@ -272,7 +273,7 @@ def main():
             print("Unexpected keys:", unexpected)
 
     checkpoint_metric = "val/loss" if val_loader is not None else "train/loss"
-    checkpoint_cb = pl.callbacks.ModelCheckpoint(
+    checkpoint_cb = ModelCheckpoint(
         dirpath=args.output_dir,
         save_top_k=2,
         monitor=checkpoint_metric,

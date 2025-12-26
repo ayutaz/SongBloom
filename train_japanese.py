@@ -10,6 +10,7 @@ from huggingface_hub import hf_hub_download
 from SongBloom.models.songbloom.songbloom_pl import SongBloom_PL
 from SongBloom.models.vae_frontend import StableVAE
 from SongBloom.training.dataset import DatasetConfig, SongBloomTrainDataset, collate_training_batch
+from SongBloom.training.lora import inject_lora, set_lora_trainable
 from SongBloom.training.sketch import ExternalSketchExtractor
 from SongBloom.training.split_jsonl import split_items, load_jsonl, write_jsonl
 
@@ -178,6 +179,17 @@ def main():
     parser.add_argument("--wandb-name", type=str, default=None)
     parser.add_argument("--wandb-mode", type=str, default=None)
 
+    parser.add_argument("--use-lora", action="store_true")
+    parser.add_argument("--lora-rank", type=int, default=16)
+    parser.add_argument("--lora-alpha", type=int, default=32)
+    parser.add_argument("--lora-dropout", type=float, default=0.05)
+    parser.add_argument(
+        "--lora-target-modules",
+        type=str,
+        default="q_proj,v_proj,to_q,to_kv,to_qkv",
+    )
+    parser.add_argument("--lora-train-all", action="store_true")
+
     args = parser.parse_args()
 
     pl.seed_everything(args.seed)
@@ -272,6 +284,17 @@ def main():
         if unexpected:
             print("Unexpected keys:", unexpected)
 
+    if args.use_lora:
+        target_modules = [t.strip() for t in args.lora_target_modules.split(",") if t.strip()]
+        replaced = inject_lora(
+            model.model,
+            target_modules=target_modules,
+            r=args.lora_rank,
+            alpha=args.lora_alpha,
+            dropout=args.lora_dropout,
+        )
+        print(f"LoRA applied to {len(replaced)} modules")
+        set_lora_trainable(model, train_all=args.lora_train_all)
     checkpoint_metric = "val/loss" if val_loader is not None else "train/loss"
     checkpoint_cb = ModelCheckpoint(
         dirpath=args.output_dir,

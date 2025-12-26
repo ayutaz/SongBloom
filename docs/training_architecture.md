@@ -514,3 +514,5 @@ phonemes = g2p("桜の花が咲いている")
   - `val/loss` が存在する場合は `ModelCheckpoint` が `val/loss` を監視
 - 長さズレ検証:
   - `--verify-lengths` / `--require-length-match` で MuQ 出力と VAE latent の長さを確認
+- LoRA:
+  - `--use-lora` でLoRAを有効化（デフォルトは LoRA のみ学習）

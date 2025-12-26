@@ -66,6 +66,10 @@ uv run python train_japanese.py \
 - `--require-length-match` : 長さ不一致があればエラー
 - `--no-wandb` : W&Bロギングを無効化
 - `--wandb-project` / `--wandb-entity` / `--wandb-name` / `--wandb-mode` : W&B設定
+- `--use-lora` : LoRAを有効化（メモリ削減）
+- `--lora-rank` / `--lora-alpha` / `--lora-dropout` : LoRAハイパーパラメータ
+- `--lora-target-modules` : LoRAを当てるモジュール名（カンマ区切り）
+- `--lora-train-all` : LoRA以外も学習（通常はLoRAのみ学習）
 
 ### JSONL分割ユーティリティ
 

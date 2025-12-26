@@ -120,7 +120,8 @@ uv run python train_japanese.py \
     --batch-size 1 \
     --accumulate-grad-batches 8 \
     --init-from-pretrained \
-    --use-cache
+    --use-cache \
+    --use-lora
 
 # CUDA GPU向け
 uv run python train_japanese.py \
@@ -129,7 +130,8 @@ uv run python train_japanese.py \
     --device cuda \
     --precision 16-mixed \
     --init-from-pretrained \
-    --use-cache
+    --use-cache \
+    --use-lora
 ```
 
 ### 学習データフォーマット

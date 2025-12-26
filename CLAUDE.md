@@ -76,7 +76,7 @@ uv run python infer.py --model-name songbloom_full_240s --input-jsonl example/te
 - **`SongBloom/models/songbloom/songbloom_mvsa.py`**: `MVSA_DiTAR`モデル（マルチストリームVAE + 自己回帰トランスフォーマー）
 - **`SongBloom/models/transformer.py`**: コアDiT（Diffusion Transformer）実装
 - **`SongBloom/models/vae_frontend/autoencoders.py`**: `StableVAE`オーディオ圧縮モデル
-- **`SongBloom/g2p/`**: Grapheme-to-Phoneme変換（中国語と英語をサポート）
+- **`SongBloom/g2p/`**: Grapheme-to-Phoneme変換（中国語、英語、日本語をサポート）
 
 ### データフォーマット
 
@@ -105,3 +105,61 @@ uv run python infer.py --model-name songbloom_full_240s --input-jsonl example/te
 - `output/`: 生成されたFLACファイルの出力先
 - `example/`: サンプル入力ファイル（test.jsonl、test.wav）
 - `SongBloom/`: メインパッケージ
+
+## 学習（Fine-tuning）
+
+### 学習コマンド（計画中）
+
+```bash
+# 日本語Fine-tuning（Apple Silicon向け）
+uv run python train_japanese.py \
+    --data-jsonl data/japanese_songs.jsonl \
+    --use-lora \
+    --device mps \
+    --dtype float32 \
+    --batch-size 1 \
+    --accumulate-grad-batches 8
+
+# CUDA GPU向け
+uv run python train_japanese.py \
+    --data-jsonl data/japanese_songs.jsonl \
+    --use-lora \
+    --device cuda \
+    --dtype bfloat16
+```
+
+### 学習データフォーマット
+
+学習には以下の形式のJSONLファイルが必要：
+
+```json
+{
+  "idx": "song_001",
+  "audio_path": "/path/to/song.wav",
+  "lyrics": "[intro] [intro] , [verse] 歌詞テキスト. , [chorus] サビ. , [outro]",
+  "prompt_wav": "/path/to/10sec_prompt.wav"
+}
+```
+
+- `audio_path`: 学習対象の楽曲（48kHz、ステレオ、最大150秒）
+- `lyrics`: 構造タグ付き歌詞
+- `prompt_wav`: 10秒のリファレンス音声
+
+詳細は `docs/training_data_format.md` を参照。
+
+### 学習アーキテクチャ
+
+- **スケッチトークン抽出**: MuQ (SSL音楽モデル) + Vector Quantization
+- **アコースティック潜在変数**: StableVAE エンコーダー
+- **損失関数**: `L_total = L_LM + 0.1 × L_flow`
+  - `L_LM`: CrossEntropy（ARステージ、スケッチトークン予測）
+  - `L_flow`: MSE（NARステージ、Rectified Flow）
+- **メモリ効率化**: LoRA（rank=16, alpha=32）
+
+詳細は `docs/training_architecture.md` を参照。
+
+### 学習用追加依存
+
+```bash
+uv add muq peft  # MuQスケッチ抽出 + LoRA
+```

@@ -316,10 +316,187 @@ z_t = (1 - t) · z_0 + t · z_1
 
 ---
 
-## 8. 参考文献
+## 8. MuQスケッチ抽出の詳細
+
+### MuQモデル
+
+MuQ（Music Query）は自己教師あり学習（SSL）による音楽表現学習モデルです。
+
+| 項目 | 値 |
+|------|-----|
+| モデルID | `OpenMuQ/MuQ-large-msd-iter` |
+| パラメータ数 | 約300M |
+| 入力サンプルレート | 24kHz |
+| 出力次元 | 1024 |
+| フレームレート | 25fps |
+
+### スケッチトークン抽出フロー
+
+```
+48kHz 音声
+    │
+    ↓ リサンプリング
+24kHz 音声
+    │
+    ↓ MuQ エンコーダー
+音楽埋め込み (T, 1024)
+    │
+    ↓ Vector Quantization
+スケッチトークン (T,)  ← Codebook: 16384
+```
+
+### Vector Quantization設定
+
+```python
+VectorQuantize(
+    dim=1024,              # MuQ出力次元
+    codebook_size=16384,   # SongBloomモデルと一致
+    decay=0.99,
+    commitment_weight=1.0
+)
+```
+
+### 参考リンク
+
+- [MuQ GitHub](https://github.com/tencent-ailab/MuQ)
+- [MuQ HuggingFace](https://huggingface.co/OpenMuQ/MuQ-large-msd-iter)
+- [MuQ論文](https://arxiv.org/abs/2501.01108)
+
+---
+
+## 9. LoRA適用（メモリ効率化）
+
+### LoRA（Low-Rank Adaptation）とは
+
+事前学習済みモデルの重みを固定し、低ランク行列のみを学習することでメモリ使用量を大幅に削減する手法です。
+
+### 推奨設定
+
+```python
+LoraConfig(
+    r=16,                    # ランク
+    lora_alpha=32,           # スケーリング係数
+    target_modules=[         # 適用対象
+        "ar_transformer.*.self_attn.q_proj",
+        "ar_transformer.*.self_attn.v_proj",
+        "nar_dit.*.attn.to_q",
+        "nar_dit.*.attn.to_v",
+    ],
+    lora_dropout=0.05,
+    bias="none"
+)
+```
+
+### メモリ効率
+
+| 学習モード | メモリ使用量 | 学習可能パラメータ |
+|-----------|-------------|-----------------|
+| 全パラメータ | ~24GB | 2B |
+| LoRA (rank=16) | ~12GB | ~20M |
+
+### 注意点
+
+- LoRAはAttentionのQ, Vプロジェクションのみに適用
+- 元のモデル重みは凍結される
+- 学習後はLoRA重みをマージして単一モデルにできる
+
+---
+
+## 10. Apple Silicon（MPS）対応
+
+### 環境設定
+
+```bash
+# 必須環境変数
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+export DISABLE_FLASH_ATTN=1
+```
+
+### 制約事項
+
+| 項目 | 制約 |
+|------|------|
+| データ型 | float32のみ（bfloat16非対応） |
+| FlashAttention | 使用不可（無効化必須） |
+| マルチプロセスDataLoader | 非推奨（num_workers=0） |
+| バッチサイズ | 1推奨 |
+
+### 推奨学習設定
+
+```yaml
+# Apple Silicon 16GB向け設定
+device: mps
+dtype: float32
+batch_size: 1
+accumulate_grad_batches: 8  # 実効バッチサイズ = 8
+gradient_checkpointing: true
+use_lora: true
+lora_rank: 16
+```
+
+### メモリ見積もり（16GB統合メモリ）
+
+| コンポーネント | サイズ |
+|--------------|-------|
+| MVSA_DiTAR (2B, float32) | ~7.6 GB |
+| VAE (frozen) | ~0.5 GB |
+| LoRA adapters | ~0.1 GB |
+| Activations (batch=1) | ~2-4 GB |
+| **合計** | **~12 GB** ✓ |
+
+### トラブルシューティング
+
+**メモリ不足（MPS out of memory）**:
+- `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0` を設定
+- バッチサイズを1に減らす
+- 勾配累積を増やす
+
+**演算エラー**:
+- `PYTORCH_ENABLE_MPS_FALLBACK=1` を確認
+- float32を使用していることを確認
+
+---
+
+## 11. 日本語Fine-tuning固有の考慮事項
+
+### G2P（Grapheme-to-Phoneme）
+
+日本語テキストから音素への変換には `pyopenjtalk-plus` を使用：
+
+```python
+from SongBloom.g2p.cn_zh_g2p import G2P_Mix
+
+g2p = G2P_Mix()
+phonemes = g2p("桜の花が咲いている")
+# Output: "s a k u r a n o h a n a g a s a i t e i r u"
+```
+
+### 対応文字種
+
+- ひらがな
+- カタカナ
+- 漢字
+- 英語（混在可能）
+
+### 言語検出
+
+テキストは自動的に言語検出され、適切なG2Pが適用されます：
+
+| 文字種 | 検出言語 |
+|-------|---------|
+| ひらがな/カタカナ | 日本語 (ja) |
+| 漢字のみ | 中国語 (zh) |
+| ASCII | 英語 (en) |
+| ひらがな + 漢字 | 日本語 (ja) |
+
+---
+
+## 12. 参考文献
 
 - [SongBloom論文](https://arxiv.org/abs/2506.07634)
 - [DiTAR: Diffusion Transformer Autoregressive](https://arxiv.org/abs/2502.03930)
 - [Rectified Flow](https://arxiv.org/abs/2209.03003)
 - [LLaMA-2](https://arxiv.org/abs/2307.09288)
 - [DiT: Scalable Diffusion Models with Transformers](https://arxiv.org/abs/2212.09748)
+- [MuQ: Self-Supervised Music Representation](https://arxiv.org/abs/2501.01108)
+- [LoRA: Low-Rank Adaptation](https://arxiv.org/abs/2106.09685)

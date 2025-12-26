@@ -190,6 +190,17 @@ cat > data/japanese_songs.jsonl << 'EOF'
 EOF
 ```
 
+### 実データがない場合（ダミーデータ）
+
+```bash
+uv run python -m SongBloom.training.make_dummy_dataset \
+  --output-dir data/dummy \
+  --num-samples 4 \
+  --duration-sec 30 \
+  --prompt-sec 10 \
+  --sketch-fps 25
+```
+
 ### プロンプト切り出しスクリプト
 
 ```bash

@@ -77,6 +77,20 @@ uv run python -m SongBloom.training.split_jsonl \
   --val-ratio 0.05
 ```
 
+### ダミーデータ生成（実データがない場合の検証用）
+
+```bash
+uv run python -m SongBloom.training.make_dummy_dataset \
+  --output-dir data/dummy \
+  --num-samples 4 \
+  --duration-sec 30 \
+  --prompt-sec 10 \
+  --sketch-fps 25
+```
+
+生成された `data/dummy/dummy.jsonl` を `--data-jsonl` に指定して、\n
+`--val-split` や `--verify-lengths` の動作確認が可能です。
+
 ## 追加したコード
 
 - `SongBloom/training/dataset.py` : 学習データセット + キャッシュ

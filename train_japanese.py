@@ -8,7 +8,6 @@ from huggingface_hub import hf_hub_download
 from SongBloom.models.songbloom.songbloom_pl import SongBloom_PL
 from SongBloom.models.vae_frontend import StableVAE
 from SongBloom.training.dataset import DatasetConfig, SongBloomTrainDataset, collate_training_batch
-from SongBloom.training.sketch import PrecomputedSketchExtractor
 
 NAME2REPO = {
     "songbloom_full_150s": "CypressYang/SongBloom",

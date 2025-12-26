@@ -196,11 +196,11 @@ def collate_training_batch(batch: List[dict], sketch_pad_value: int = 0) -> dict
     sketches = torch.full((len(batch), max_len), sketch_pad_value, dtype=torch.long)
 
     for i, b in enumerate(batch):
-        l = b["length"]
-        if l == 0:
+        length = b["length"]
+        if length == 0:
             continue
-        latents[i, :, :l] = b["audio_latent"][:, :l]
-        sketches[i, :l] = b["sketch_tokens"][:l]
+        latents[i, :, :length] = b["audio_latent"][:, :length]
+        sketches[i, :length] = b["sketch_tokens"][:length]
 
     prompts = torch.stack([b["prompt_wav"] for b in batch], dim=0)  # [B, 1, T]
     lyrics = [b["lyrics"] for b in batch]

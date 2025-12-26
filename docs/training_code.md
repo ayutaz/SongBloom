@@ -95,6 +95,22 @@ uv run python -m SongBloom.training.make_dummy_dataset \
 生成された `data/dummy/dummy.jsonl` を `--data-jsonl` に指定して、\n
 `--val-split` や `--verify-lengths` の動作確認が可能です。
 
+### jaCappella からデータセットを作成
+
+jaCappella は **歌詞(MusicXML)付き**のため、手作業なしで JSONL を生成できます。
+Hugging Face 側で利用条件の同意が必要です（ログイン後に承諾）。
+
+```bash
+uv run python -m SongBloom.training.prepare_jacappella \
+  --output-dir data/jacappella_prepared \
+  --download-dir data/jacappella_raw \
+  --audio-type lead_vocal \
+  --musicxml-type svs \
+  --prompt-sec 10
+```
+
+生成された `data/jacappella_prepared/jacappella.jsonl` を `--data-jsonl` に指定してください。
+
 ## 追加したコード
 
 - `SongBloom/training/dataset.py` : 学習データセット + キャッシュ

@@ -201,6 +201,17 @@ uv run python -m SongBloom.training.make_dummy_dataset \
   --sketch-fps 25
 ```
 
+### jaCappella の前処理
+
+```bash
+uv run python -m SongBloom.training.prepare_jacappella \
+  --output-dir data/jacappella_prepared \
+  --download-dir data/jacappella_raw \
+  --audio-type lead_vocal \
+  --musicxml-type svs \
+  --prompt-sec 10
+```
+
 ### プロンプト切り出しスクリプト
 
 ```bash

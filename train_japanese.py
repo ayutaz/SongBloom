@@ -77,6 +77,10 @@ def build_dataset_cfg(args, cfg) -> DatasetConfig:
         clean_lyrics=args.clean_lyrics,
         process_lyrics=args.process_lyrics,
         lyric_processor=args.lyric_processor,
+        require_length_match=args.require_length_match,
+        log_length_mismatch=args.log_length_mismatch,
+        max_mismatch_logs=args.max_mismatch_logs,
+        return_length_info=args.verify_lengths,
     )
 
 
@@ -96,6 +100,18 @@ def maybe_split_jsonl(args) -> tuple[str, str | None]:
         write_jsonl(train_jsonl, train_items)
         write_jsonl(val_jsonl, val_items)
     return train_jsonl, val_jsonl
+
+
+def verify_dataset_lengths(dataset, max_samples: int) -> None:
+    mismatches = 0
+    total = 0
+    max_samples = max_samples if max_samples > 0 else len(dataset)
+    for i in range(min(len(dataset), max_samples)):
+        sample = dataset[i]
+        total += 1
+        if sample.get("orig_audio_len") != sample.get("orig_sketch_len"):
+            mismatches += 1
+    print(f"[verify] checked={total} mismatches={mismatches}")
 
 
 def main():
@@ -146,6 +162,13 @@ def main():
     parser.add_argument("--muq-vq-decay", type=float, default=0.99)
     parser.add_argument("--muq-commitment-weight", type=float, default=1.0)
     parser.add_argument("--muq-freeze-codebook", action="store_true")
+    parser.add_argument("--require-vq-path", action="store_true")
+
+    parser.add_argument("--require-length-match", action="store_true")
+    parser.add_argument("--log-length-mismatch", action="store_true")
+    parser.add_argument("--max-mismatch-logs", type=int, default=20)
+    parser.add_argument("--verify-lengths", action="store_true")
+    parser.add_argument("--verify-lengths-max", type=int, default=100)
 
     args = parser.parse_args()
 
@@ -176,6 +199,8 @@ def main():
 
     sketch_extractor = None
     if args.sketch_mode == "muq":
+        if args.require_vq_path and not args.muq_vq_path:
+            raise ValueError("--muq-vq-path is required when --require-vq-path is set.")
         sketch_extractor = ExternalSketchExtractor(
             model_id=args.muq_model_id,
             device=args.muq_device,
@@ -199,6 +224,8 @@ def main():
         block_size=cfg.model.block_size,
         sketch_extractor=sketch_extractor,
     )
+    if args.verify_lengths:
+        verify_dataset_lengths(dataset, args.verify_lengths_max)
 
     dataloader = torch.utils.data.DataLoader(
         dataset,
@@ -237,10 +264,11 @@ def main():
         if unexpected:
             print("Unexpected keys:", unexpected)
 
+    checkpoint_metric = "val/loss" if val_loader is not None else "train/loss"
     checkpoint_cb = pl.callbacks.ModelCheckpoint(
         dirpath=args.output_dir,
         save_top_k=2,
-        monitor="train/loss",
+        monitor=checkpoint_metric,
         mode="min",
         save_last=True,
     )

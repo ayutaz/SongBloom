@@ -24,6 +24,10 @@ class TestSplitHelper(unittest.TestCase):
                 split_seed=1234,
                 overwrite_split=True,
                 output_dir=tmpdir,
+                require_length_match=False,
+                log_length_mismatch=False,
+                max_mismatch_logs=0,
+                verify_lengths=True,
             )
 
             train_path, val_path = train_japanese.maybe_split_jsonl(args)

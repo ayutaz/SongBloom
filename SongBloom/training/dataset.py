@@ -27,6 +27,10 @@ class DatasetConfig:
     clean_lyrics: bool = False
     process_lyrics: bool = False
     lyric_processor: Optional[str] = None
+    require_length_match: bool = False
+    log_length_mismatch: bool = False
+    max_mismatch_logs: int = 20
+    return_length_info: bool = False
 
 
 def _load_jsonl(path: str) -> List[dict]:
@@ -102,6 +106,7 @@ class SongBloomTrainDataset(Dataset):
         if cfg.cache_dir:
             os.makedirs(cfg.cache_dir, exist_ok=True)
         self._lyric_processor = key2processor.get(cfg.lyric_processor) if cfg.lyric_processor else None
+        self._mismatch_log_count = 0
 
     def __len__(self) -> int:
         return len(self.items)
@@ -167,6 +172,19 @@ class SongBloomTrainDataset(Dataset):
 
         sketch_tokens = self._load_sketch_tokens(item, audio, target_length=audio_latent.shape[-1])
 
+        orig_audio_len = audio_latent.shape[-1]
+        orig_sketch_len = sketch_tokens.shape[-1]
+        if orig_audio_len != orig_sketch_len:
+            if self.cfg.require_length_match:
+                raise ValueError(
+                    f"Length mismatch for {idx}: audio_latent={orig_audio_len}, sketch={orig_sketch_len}"
+                )
+            if self.cfg.log_length_mismatch and self._mismatch_log_count < self.cfg.max_mismatch_logs:
+                print(
+                    f"[warn] length mismatch for {idx}: audio_latent={orig_audio_len}, sketch={orig_sketch_len}"
+                )
+                self._mismatch_log_count += 1
+
         # align lengths
         min_len = min(audio_latent.shape[-1], sketch_tokens.shape[-1])
         audio_latent = audio_latent[..., :min_len]
@@ -183,6 +201,9 @@ class SongBloomTrainDataset(Dataset):
             "sketch_tokens": sketch_tokens,
             "length": x_len,
         }
+        if self.cfg.return_length_info:
+            out["orig_audio_len"] = orig_audio_len
+            out["orig_sketch_len"] = orig_sketch_len
         if cache_path and self.cfg.use_cache:
             torch.save(
                 {

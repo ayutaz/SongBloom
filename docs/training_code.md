@@ -56,6 +56,10 @@ uv run python train_japanese.py \
   - デフォルトは **学習モジュール側で変換**（推奨）
 - `--val-jsonl` / `--val-split` : 検証データの指定
 - `--resume-from` : チェックポイントから再開
+- `--require-vq-path` : MuQ使用時に VQ 重みの指定を必須化
+- `--verify-lengths` : MuQ出力とVAE latent長のズレを検証（先頭N件）
+- `--verify-lengths-max` : 検証する最大件数
+- `--require-length-match` : 長さ不一致があればエラー
 
 ### JSONL分割ユーティリティ
 
@@ -83,6 +87,7 @@ pip install muq
 ```
 
 必要に応じて `--muq-vq-path` に VQ の事前学習済み重みを指定してください。
+再現性重視の場合は `--require-vq-path` を付けて必須化してください。
 MuQの出力は 25fps を想定し、VQ後のトークン長が VAE latent と合うように調整してください。
 
 ---

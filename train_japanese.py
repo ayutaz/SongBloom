@@ -318,7 +318,7 @@ def main():
         devices=1,
         precision=args.precision,
         max_epochs=args.max_epochs,
-        max_steps=args.max_steps if args.max_steps > 0 else None,
+        max_steps=args.max_steps if args.max_steps > 0 else -1,
         accumulate_grad_batches=args.accumulate_grad_batches,
         gradient_clip_val=1.0,
         callbacks=[checkpoint_cb],

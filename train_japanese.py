@@ -2,6 +2,7 @@ import argparse
 import os
 import torch
 import lightning as pl
+from lightning.pytorch.loggers import WandbLogger
 from omegaconf import OmegaConf, DictConfig
 from huggingface_hub import hf_hub_download
 
@@ -170,6 +171,12 @@ def main():
     parser.add_argument("--verify-lengths", action="store_true")
     parser.add_argument("--verify-lengths-max", type=int, default=100)
 
+    parser.add_argument("--no-wandb", action="store_true")
+    parser.add_argument("--wandb-project", type=str, default="songbloom")
+    parser.add_argument("--wandb-entity", type=str, default=None)
+    parser.add_argument("--wandb-name", type=str, default=None)
+    parser.add_argument("--wandb-mode", type=str, default=None)
+
     args = parser.parse_args()
 
     pl.seed_everything(args.seed)
@@ -273,6 +280,15 @@ def main():
         save_last=True,
     )
 
+    logger = None
+    if not args.no_wandb:
+        logger = WandbLogger(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            name=args.wandb_name,
+            mode=args.wandb_mode,
+        )
+
     trainer = pl.Trainer(
         accelerator=args.device,
         devices=1,
@@ -284,6 +300,7 @@ def main():
         callbacks=[checkpoint_cb],
         default_root_dir=args.output_dir,
         log_every_n_steps=10,
+        logger=logger,
     )
 
     trainer.fit(model, dataloader, val_dataloaders=val_loader, ckpt_path=args.resume_from)

@@ -60,6 +60,8 @@ uv run python train_japanese.py \
 - `--verify-lengths` : MuQ出力とVAE latent長のズレを検証（先頭N件）
 - `--verify-lengths-max` : 検証する最大件数
 - `--require-length-match` : 長さ不一致があればエラー
+- `--no-wandb` : W&Bロギングを無効化
+- `--wandb-project` / `--wandb-entity` / `--wandb-name` / `--wandb-mode` : W&B設定
 
 ### JSONL分割ユーティリティ
 

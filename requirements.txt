@@ -16,3 +16,4 @@ num2words==0.5.13
 descript-audio-codec==1.0.0
 vector_quantize_pytorch==1.14.8
 ruff>=0.5.0
+wandb>=0.16.0

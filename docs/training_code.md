@@ -5,11 +5,11 @@
 
 ## 重要な前提（スケッチトークン）
 
-SongBloomの学習には **MuQ + VQ によるスケッチトークン** が必要ですが、このリポジトリには MuQ の実装が含まれていません。
-そのため、学習コードは以下のどちらかを要求します：
+SongBloomの学習には **MuQ + VQ によるスケッチトークン** が必要です。
+このリポジトリでは以下のどちらかを選べます：
 
 - **事前計算したスケッチトークンをJSONLで渡す**（推奨）
-- `SongBloom/training/sketch.py` を自分のMuQパイプラインで実装する
+- `--sketch-mode muq` で学習時に自動抽出する（MuQの別途インストールが必要）
 
 現在の実装は `sketch_path` で読み込む方式を標準としています。
 MuQを使って自動抽出する場合は `--sketch-mode muq` を指定してください（下記）。
@@ -47,6 +47,10 @@ uv run python train_japanese.py \
   --use-cache
 ```
 
+### 監視（W&B）
+
+学習ログは **W&B がデフォルトで有効** です。無効化する場合は `--no-wandb` を指定してください。
+
 ### 主なオプション
 
 - `--use-cache` : `cache/training/` に VAE latent と sketch を保存
@@ -76,8 +80,9 @@ uv run python -m SongBloom.training.split_jsonl \
 ## 追加したコード
 
 - `SongBloom/training/dataset.py` : 学習データセット + キャッシュ
-- `SongBloom/training/sketch.py` : スケッチ抽出（現在は事前計算前提）
-- `train_japanese.py` : 学習スクリプト（Lightning）
+- `SongBloom/training/sketch.py` : スケッチ抽出（MuQ + VQ）
+- `SongBloom/training/split_jsonl.py` : JSONL分割ユーティリティ
+- `train_japanese.py` : 学習スクリプト（Lightning / W&B / resume / val対応）
 
 ## MuQを使ってスケッチを計算したい場合
 

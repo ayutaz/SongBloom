@@ -500,3 +500,17 @@ phonemes = g2p("桜の花が咲いている")
 - [DiT: Scalable Diffusion Models with Transformers](https://arxiv.org/abs/2212.09748)
 - [MuQ: Self-Supervised Music Representation](https://arxiv.org/abs/2501.01108)
 - [LoRA: Low-Rank Adaptation](https://arxiv.org/abs/2106.09685)
+
+---
+
+## 実装メモ（このリポジトリ）
+
+- 学習スクリプト: `train_japanese.py`
+- スケッチ抽出: `SongBloom/training/sketch.py`
+  - `--sketch-mode muq` で MuQ + VQ による自動抽出が可能
+  - 再現性重視なら `--require-vq-path` で VQ 重みを必須化
+- 検証データ:
+  - `--val-jsonl` もしくは `--val-split` で分割
+  - `val/loss` が存在する場合は `ModelCheckpoint` が `val/loss` を監視
+- 長さズレ検証:
+  - `--verify-lengths` / `--require-length-match` で MuQ 出力と VAE latent の長さを確認

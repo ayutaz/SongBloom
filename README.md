@@ -141,6 +141,7 @@ ruff check .
 
 This repository now includes a minimal training pipeline (Lightning) aimed at Japanese fine-tuning.
 See `docs/training_code.md` for details, JSONL format, and required sketch tokens.
+W&B logging is enabled by default in `train_japanese.py` (disable with `--no-wandb`).
 
 ## Citation
 

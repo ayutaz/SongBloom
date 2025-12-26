@@ -10,6 +10,12 @@ SongBloomの日本語Fine-tuning学習に必要なデータフォーマットを
 2. **歌詞テキスト**: 構造タグ付きの歌詞
 3. **プロンプトWAVファイル**: スタイル参照用の10秒音声
 
+加えて、**スケッチトークン**が必要です（MuQ + VQ）。
+このリポジトリでは以下のいずれかで用意します：
+
+- `sketch_path` で事前計算済みトークンを渡す
+- `--sketch-mode muq` で学習時に自動抽出する
+
 ## JSONLフォーマット
 
 学習データはJSONL（JSON Lines）形式で準備します。各行が1つの学習サンプルです。
@@ -31,6 +37,22 @@ SongBloomの日本語Fine-tuning学習に必要なデータフォーマットを
 | `audio_path` | string | 楽曲WAVファイルのパス |
 | `lyrics` | string | 構造タグ付き歌詞 |
 | `prompt_wav` | string | 10秒プロンプトのパス |
+
+### オプションフィールド
+
+```json
+{
+  "sketch_path": "/path/to/sketch_tokens.pt"
+}
+```
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `sketch_path` | string | スケッチトークンのファイルパス（.pt/.npy/.npz） |
+
+**注意**:
+- `sketch_path` を指定しない場合は `--sketch-mode muq` を使用してください。
+- `.pt` の場合は `{"sketch": tensor}` 形式でも読み込み可能です。
 
 ---
 
@@ -193,7 +215,7 @@ done
     │   アコースティック潜在変数
     │
     └─→ MuQ + VQ ──────────→ x_sketch (T,)
-        スケッチトークン
+        スケッチトークン（`sketch_path` がない場合のみ）
 
 歌詞テキスト
     │

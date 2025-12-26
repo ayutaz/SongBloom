@@ -108,24 +108,28 @@ uv run python infer.py --model-name songbloom_full_240s --input-jsonl example/te
 
 ## 学習（Fine-tuning）
 
-### 学習コマンド（計画中）
+### 学習コマンド
 
 ```bash
 # 日本語Fine-tuning（Apple Silicon向け）
 uv run python train_japanese.py \
     --data-jsonl data/japanese_songs.jsonl \
-    --use-lora \
+    --val-split 0.05 \
     --device mps \
-    --dtype float32 \
+    --precision 32 \
     --batch-size 1 \
-    --accumulate-grad-batches 8
+    --accumulate-grad-batches 8 \
+    --init-from-pretrained \
+    --use-cache
 
 # CUDA GPU向け
 uv run python train_japanese.py \
     --data-jsonl data/japanese_songs.jsonl \
-    --use-lora \
+    --val-split 0.05 \
     --device cuda \
-    --dtype bfloat16
+    --precision 16-mixed \
+    --init-from-pretrained \
+    --use-cache
 ```
 
 ### 学習データフォーマット
@@ -137,13 +141,15 @@ uv run python train_japanese.py \
   "idx": "song_001",
   "audio_path": "/path/to/song.wav",
   "lyrics": "[intro] [intro] , [verse] 歌詞テキスト. , [chorus] サビ. , [outro]",
-  "prompt_wav": "/path/to/10sec_prompt.wav"
+  "prompt_wav": "/path/to/10sec_prompt.wav",
+  "sketch_path": "/path/to/sketch_tokens.pt"
 }
 ```
 
 - `audio_path`: 学習対象の楽曲（48kHz、ステレオ、最大150秒）
 - `lyrics`: 構造タグ付き歌詞
 - `prompt_wav`: 10秒のリファレンス音声
+- `sketch_path`: スケッチトークン（事前計算、任意）
 
 詳細は `docs/training_data_format.md` を参照。
 
@@ -161,5 +167,5 @@ uv run python train_japanese.py \
 ### 学習用追加依存
 
 ```bash
-uv add muq peft  # MuQスケッチ抽出 + LoRA
+uv add muq  # MuQスケッチ抽出
 ```

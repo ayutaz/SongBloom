@@ -5,3 +5,6 @@ third_party
 .DS_Store
 2506.07634v5.pdf
 data/
+.env
+checkpoints/
+wandb/

@@ -106,10 +106,12 @@ uv run python -m SongBloom.training.prepare_jacappella \
   --download-dir data/jacappella_raw \
   --audio-type lead_vocal \
   --musicxml-type svs \
-  --prompt-sec 10
+  --prompt-sec 10 \
+  --clean-japanese
 ```
 
 生成された `data/jacappella_prepared/jacappella.jsonl` を `--data-jsonl` に指定してください。
+※ `--clean-japanese` は英字/不要記号を除去し、日本語のみの歌詞に整形します。
 
 ### MuQ + VQ のコードブック学習
 

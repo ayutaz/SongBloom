@@ -49,7 +49,7 @@ class TestPrepareJaCappella(unittest.TestCase):
             audio_path = os.path.join(root, "lead_vocal.wav")
             xml_path = os.path.join(root, "song_SVS.musicxml")
             _write_wav(audio_path, sr=8000, seconds=1.0)
-            _write_musicxml(xml_path, "テスト。")
+            _write_musicxml(xml_path, "テスト。ABC123")
 
             out_dir = os.path.join(tmpdir, "prepared")
             jsonl_path = prepare_jacappella(
@@ -63,12 +63,15 @@ class TestPrepareJaCappella(unittest.TestCase):
                 overwrite=True,
                 no_download=True,
                 skip_empty_lyrics=True,
+                clean_japanese=True,
             )
 
             self.assertTrue(os.path.exists(jsonl_path))
             with open(jsonl_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
             self.assertEqual(len(lines), 1)
+            self.assertIn("テスト", lines[0])
+            self.assertNotIn("ABC", lines[0])
 
 
 if __name__ == "__main__":

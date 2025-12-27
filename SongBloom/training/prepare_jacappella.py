@@ -97,6 +97,15 @@ def _build_lyrics(xml_path: str) -> Optional[str]:
     return f"[verse] {text}."
 
 
+def _clean_japanese_only(text: str) -> str:
+    # Keep Japanese characters and basic punctuation for structure.
+    text = re.sub(r"[^ぁ-ゟ゠-ヿ一-鿿々ー・.,\\s]", "", text)
+    text = re.sub(r"\\s+", " ", text).strip()
+    text = re.sub(r"[.]{2,}", ".", text)
+    text = re.sub(r"[,]{2,}", ",", text)
+    return text.strip("., ")
+
+
 def _make_prompt(audio_path: str, prompt_path: str, prompt_sec: float, sample_rate: int) -> None:
     wav, sr = torchaudio.load(audio_path)
     if sr != sample_rate:
@@ -146,6 +155,7 @@ def prepare_jacappella(
     overwrite: bool,
     no_download: bool,
     skip_empty_lyrics: bool,
+    clean_japanese: bool,
 ) -> str:
     os.makedirs(output_dir, exist_ok=True)
     if not no_download:
@@ -177,6 +187,14 @@ def prepare_jacappella(
             _make_prompt(audio_path, prompt_path, prompt_sec, sample_rate)
 
         lyrics = _build_lyrics(xml_path)
+        if lyrics is not None and clean_japanese:
+            parts = lyrics.split(" ", 1)
+            if len(parts) == 2:
+                tag, content = parts
+                content = _clean_japanese_only(content)
+                lyrics = f"{tag} {content}." if content else None
+            else:
+                lyrics = _clean_japanese_only(lyrics)
         if lyrics is None and skip_empty_lyrics:
             skipped += 1
             continue
@@ -212,6 +230,7 @@ def main() -> None:
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--no-download", action="store_true")
     parser.add_argument("--skip-empty-lyrics", action="store_true", default=True)
+    parser.add_argument("--clean-japanese", action="store_true", help="Remove non-Japanese characters from lyrics")
     args = parser.parse_args()
 
     subsets = [s.strip() for s in args.subsets.split(",") if s.strip()] if args.subsets else None
@@ -226,6 +245,7 @@ def main() -> None:
         overwrite=args.overwrite,
         no_download=args.no_download,
         skip_empty_lyrics=args.skip_empty_lyrics,
+        clean_japanese=args.clean_japanese,
     )
     print(f"wrote jsonl -> {jsonl_path}")
 

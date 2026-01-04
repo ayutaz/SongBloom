@@ -108,6 +108,14 @@ uv run python infer.py --model-name songbloom_full_240s --input-jsonl example/te
 
 ## 学習（Fine-tuning）
 
+### 重要な注意事項
+
+> **公式学習コードは未公開です**
+
+- Tencent AI Lab は企業ポリシーにより学習コードを公開していません
+- このリポジトリの学習コードは**論文に基づく独自実装**です
+- 参照: [GitHub Issue #29](https://github.com/tencent-ailab/SongBloom/issues/29)
+
 ### 学習コマンド
 
 ```bash

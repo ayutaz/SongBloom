@@ -294,3 +294,45 @@ Error: Invalid lyrics format
 - `batch-size`を1に減らす
 - `--use-lora`オプションを使用する
 - 短い楽曲から始める
+
+---
+
+## 公開データセットの評価
+
+### japanese-singing-voice (HuggingFace)
+
+URL: https://huggingface.co/datasets/tts-dataset/japanese-singing-voice
+
+| 項目 | 値 | SongBloom適合性 |
+|------|-----|----------------|
+| 規模 | 約1,000時間 | ✅ 十分 |
+| フォーマット | MP3 | ⚠️ 要変換（48kHz WAV） |
+| チャンネル | 不明 | ⚠️ 要確認 |
+| **歌詞** | **なし** | ❌ **致命的** |
+| ライセンス | CC-BY-NC-4.0 | ✅ 学術利用可 |
+
+**結論**: 歌詞データがないため、**そのままでは使用不可**。
+
+使用するには以下の追加作業が必要：
+1. Whisper等のASRで歌詞を書き起こし
+2. 構造タグ（`[verse]`, `[chorus]`等）を付与
+3. MP3 → 48kHz WAV変換
+4. 10秒プロンプトの切り出し
+
+### jaCappella
+
+URL: https://tomohikonakamura.github.io/jaCappella_corpus/
+
+| 項目 | 値 | SongBloom適合性 |
+|------|-----|----------------|
+| 規模 | 35曲（約1時間） | ⚠️ 少ない |
+| フォーマット | WAV | ✅ |
+| 歌詞 | MusicXML | ✅ |
+| ライセンス | 学術目的 | ✅ |
+
+**結論**: 歌詞付きで使いやすいが、データ量が少ない。動作確認・実験用に最適。
+
+### 推奨アプローチ
+
+1. **動作確認**: jaCappella（約1時間）で学習パイプラインを検証
+2. **本格学習**: 歌詞付きデータセットを自前で構築、または japanese-singing-voice + Whisper書き起こし

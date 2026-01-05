@@ -139,6 +139,8 @@ def main():
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--precision", type=str, default="32")
     parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument("--devices", type=int, default=1, help="Number of GPUs to use")
+    parser.add_argument("--strategy", type=str, default="auto", help="Training strategy (auto, ddp, ddp_spawn, etc.)")
 
     parser.add_argument("--prompt-len", type=float, default=10.0)
     parser.add_argument("--max-duration", type=float, default=0)
@@ -315,7 +317,8 @@ def main():
 
     trainer = pl.Trainer(
         accelerator=args.device,
-        devices=1,
+        devices=args.devices,
+        strategy=args.strategy if args.devices > 1 else "auto",
         precision=args.precision,
         max_epochs=args.max_epochs,
         max_steps=args.max_steps if args.max_steps > 0 else -1,

@@ -101,6 +101,72 @@ def _clean_japanese_only(text: str) -> str:
     return text.strip("., ")
 
 
+def _split_by_length(text: str, chunk_size: int = 60) -> list[str]:
+    """Split text into chunks of approximately chunk_size characters."""
+    chunks = []
+    current = ""
+    for char in text:
+        current += char
+        if len(current) >= chunk_size:
+            chunks.append(current)
+            current = ""
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _infer_sections(text: str) -> str:
+    """Infer section structure from lyrics text.
+
+    Heuristic approach:
+    - Split by periods to get sentences
+    - If no periods or only 1-2 sentences, split by character count
+    - Group into verse/chorus sections
+    - Add intro/outro based on number of sections
+    """
+    # Split by period, keeping non-empty parts
+    sentences = [s.strip() for s in text.split(".") if s.strip()]
+
+    # If few sentences but long text, split by character count
+    total_len = len(text)
+    if len(sentences) <= 2 and total_len > 100:
+        sentences = _split_by_length(text.replace(".", ""), chunk_size=60)
+
+    if not sentences or len(sentences) <= 1:
+        return f"[verse] {text}."
+
+    # Group sentences into sections (roughly 2-3 sentences per section)
+    sections = []
+    current_section = []
+    for i, sentence in enumerate(sentences):
+        current_section.append(sentence)
+        # Create new section every 2-3 sentences
+        if len(current_section) >= 2 or i == len(sentences) - 1:
+            sections.append(". ".join(current_section) + ".")
+            current_section = []
+
+    if not sections:
+        return f"[verse] {text}."
+
+    # Build formatted lyrics with section tags
+    formatted_parts = []
+
+    # Add intro (3 seconds worth of intro tags)
+    formatted_parts.append("[intro] [intro] [intro]")
+
+    # Alternate between verse and chorus
+    for i, section in enumerate(sections):
+        if i % 2 == 0:
+            formatted_parts.append(f"[verse] {section}")
+        else:
+            formatted_parts.append(f"[chorus] {section}")
+
+    # Add outro (2 seconds)
+    formatted_parts.append("[outro] [outro]")
+
+    return " , ".join(formatted_parts)
+
+
 def _build_lyrics(xml_path: str, clean_japanese: bool) -> Optional[str]:
     """Build formatted lyrics from MusicXML."""
     text = _extract_lyrics_from_musicxml(xml_path)
@@ -112,7 +178,7 @@ def _build_lyrics(xml_path: str, clean_japanese: bool) -> Optional[str]:
         if not text:
             return None
 
-    return f"[verse] {text}."
+    return _infer_sections(text)
 
 
 def _make_prompt(

@@ -327,6 +327,7 @@ def main():
         callbacks=[checkpoint_cb],
         default_root_dir=args.output_dir,
         log_every_n_steps=10,
+        val_check_interval=0.25,  # validate every 25% of epoch
         logger=logger,
     )
 

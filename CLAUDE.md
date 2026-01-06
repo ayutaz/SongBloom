@@ -67,6 +67,23 @@ uv run python infer.py --input-jsonl example/test.jsonl --dtype bfloat16
 uv run python infer.py --model-name songbloom_full_240s --input-jsonl example/test_240s.jsonl
 ```
 
+### テスト推論（短時間版）
+
+開発・デバッグ時は短い音声を生成して確認：
+
+```bash
+# 10秒の音声を生成（テスト用）
+uv run python infer.py \
+    --input-jsonl data/test_inference.jsonl \
+    --output-dir output/test \
+    --max-duration 10 \
+    --device cuda:0 \
+    --dtype bfloat16
+```
+
+- `--max-duration 10`: 生成時間を10秒に制限
+- 通常の150秒生成は約15分、10秒生成は約1分
+
 ## アーキテクチャ
 
 ### コアコンポーネント

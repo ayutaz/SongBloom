@@ -192,6 +192,13 @@ def main():
     )
     parser.add_argument("--lora-train-all", action="store_true")
 
+    # CFG and diffusion settings (論文準拠)
+    parser.add_argument("--h-dropout", type=float, default=0.1,
+                        help="CFG dropout rate for hidden vectors (default: 0.1)")
+    parser.add_argument("--timestep-sampler", type=str, default="logit_normal",
+                        choices=["uniform", "logit_normal", "trunc_logit_normal"],
+                        help="Timestep sampling distribution (default: logit_normal)")
+
     args = parser.parse_args()
 
     pl.seed_everything(args.seed)
@@ -204,6 +211,11 @@ def main():
     cfg.vae.vae_ckpt = downloads["vae_ckpt_path"]
 
     cfg.train = build_train_cfg(args)
+
+    # Apply CFG and diffusion settings to model config (論文準拠)
+    cfg.model['h_dropout'] = args.h_dropout
+    cfg.model['timestep_sampler'] = args.timestep_sampler
+
     if not hasattr(cfg, "train_dataset"):
         cfg.train_dataset = OmegaConf.create()
     cfg.train_dataset.lyric_processor = args.lyric_processor

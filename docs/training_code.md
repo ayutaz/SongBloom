@@ -17,6 +17,9 @@ SongBloomの学習には **MuQ + VQ によるスケッチトークン** が必�
 現在の実装は `sketch_path` で読み込む方式を標準としています。
 MuQを使って自動抽出する場合は `--sketch-mode muq` を指定してください（下記）。
 
+> **重要**: `--sketch-mode muq` を使用する場合、**必ず `--muq-vq-path` でVQコードブックを指定**してください。
+> コードブックなしでは スケッチトークンがランダムになり、lossが下がりません（ln(16384)≈9.7より大きい値で停滞）。
+
 ## JSONLフォーマット（学習）
 
 既存の `docs/training_data_format.md` に加えて、**sketch tokens の参照**を追加してください。
@@ -116,22 +119,52 @@ uv run python -m SongBloom.training.prepare_jacappella \
 生成された `data/jacappella_prepared/jacappella.jsonl` を `--data-jsonl` に指定してください。
 ※ `--clean-japanese` は英字/不要記号を除去し、日本語のみの歌詞に整形します。
 
-### MuQ + VQ のコードブック学習
+### MuQ + VQ のコードブック学習（必須）
 
-SongBloomの精度を上げるには、MuQ埋め込み用の VQコードブック（16384）が必要です。
-以下で VQ 重みを学習し、`--muq-vq-path` に指定してください。
+SongBloomの学習には、MuQ埋め込み用の VQコードブック（16384）が**必須**です。
+公式リポジトリではVQコードブックが公開されていないため、自前で学習する必要があります。
+
+#### Step 1: VQコードブック学習
 
 ```bash
-uv run python -m SongBloom.training.train_vq \
-  --data-jsonl data/jacappella_prepared/jacappella.jsonl \
-  --output-path data/vq/vq_16384.pt \
-  --steps 200 \
-  --batch-size 2 \
-  --device cpu
+uv run python train_vq_codebook.py \
+  --data-dir data/japanese_singing_prepared/audio \
+  --output checkpoints/vq_codebook.pt \
+  --codebook-size 16384 \
+  --epochs 30 \
+  --device cuda
+```
+
+**主なオプション:**
+- `--data-dir`: 音声ファイルが含まれるディレクトリ
+- `--output`: 出力先パス
+- `--codebook-size`: コードブックサイズ（SongBloomは16384）
+- `--epochs`: 学習エポック数
+- `--device`: cuda / cpu / mps
+- `--chunk-size`: 1回の処理フレーム数（メモリ不足時は減らす）
+- `--save-every`: チェックポイント保存間隔
+
+#### Step 2: VQコードブックを指定して学習
+
+```bash
+uv run python train_japanese.py \
+  --data-jsonl data/japanese_singing_prepared/japanese_singing.jsonl \
+  --sketch-mode muq \
+  --muq-vq-path checkpoints/vq_codebook.pt \
+  --val-split 0.1 \
+  --device cuda \
+  --use-lora \
+  --init-from-pretrained
 ```
 
 ※ MuQ の前処理で複素数演算が発生するため、MPS ではエラーになることがあります。
 その場合は `--device cpu` を指定してください。
+
+#### VQコードブックなしで学習した場合の症状
+
+- lossが ~10.5 付近で停滞（ランダム予測の ln(16384) ≈ 9.7 より悪い）
+- 警告メッセージ: `Warning: VQ codebook is not provided. Tokens will be random.`
+- 学習が進まず、生成品質が全く向上しない
 
 ## 追加したコード
 
@@ -139,6 +172,7 @@ uv run python -m SongBloom.training.train_vq \
 - `SongBloom/training/sketch.py` : スケッチ抽出（MuQ + VQ）
 - `SongBloom/training/split_jsonl.py` : JSONL分割ユーティリティ
 - `train_japanese.py` : 学習スクリプト（Lightning / W&B / resume / val対応）
+- `train_vq_codebook.py` : VQコードブック学習スクリプト
 
 ## MuQを使ってスケッチを計算したい場合
 

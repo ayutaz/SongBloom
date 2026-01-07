@@ -195,4 +195,36 @@ uv run python train_japanese.py \
 
 ```bash
 uv add muq  # MuQスケッチ抽出
+uv add vector-quantize-pytorch  # VQコードブック
 ```
+
+### VQコードブック学習（必須）
+
+> **重要**: `--sketch-mode muq` で学習する場合、VQコードブックの事前学習が必要です。
+> コードブックなしではスケッチトークンがランダムになり、モデルが学習できません。
+
+```bash
+# Step 1: VQコードブックを学習
+uv run python train_vq_codebook.py \
+    --data-dir data/japanese_singing_prepared/audio \
+    --output checkpoints/vq_codebook.pt \
+    --codebook-size 16384 \
+    --epochs 30 \
+    --device cuda
+
+# Step 2: VQコードブックを指定して学習
+uv run python train_japanese.py \
+    --data-jsonl data/japanese_singing_prepared/japanese_singing.jsonl \
+    --sketch-mode muq \
+    --muq-vq-path checkpoints/vq_codebook.pt \
+    ...
+```
+
+### 現在の学習状況
+
+| 項目 | 状態 |
+|------|------|
+| データセット | japanese-singing-voice (HuggingFace) |
+| 処理済みサンプル | 403曲 (~20時間) |
+| VQコードブック | 学習中 |
+| メイン学習 | VQコードブック完了待ち |

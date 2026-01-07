@@ -15,6 +15,12 @@ import torch.nn.functional as F
 import torchaudio
 from tqdm import tqdm
 
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+
 
 def load_muq_model(model_id: str, device: str):
     """Load MuQ model."""
@@ -88,6 +94,26 @@ def train_vq_codebook(args):
     """
     device = args.device
 
+    # Initialize WandB
+    use_wandb = WANDB_AVAILABLE and not args.no_wandb
+    if use_wandb:
+        wandb.init(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            name=args.wandb_name,
+            config={
+                "codebook_size": args.codebook_size,
+                "embedding_dim": args.embedding_dim,
+                "decay": args.decay,
+                "epochs": args.epochs,
+                "chunk_size": args.chunk_size,
+                "muq_model_id": args.muq_model_id,
+            },
+        )
+        print("WandB initialized")
+    else:
+        print("WandB disabled or not available")
+
     print(f"Loading MuQ model: {args.muq_model_id}")
     muq_model = load_muq_model(args.muq_model_id, device)
 
@@ -109,6 +135,7 @@ def train_vq_codebook(args):
     os.makedirs(os.path.dirname(args.output) if os.path.dirname(args.output) else ".", exist_ok=True)
 
     best_loss = float("inf")
+    global_step = 0
 
     for epoch in range(args.epochs):
         total_loss = 0
@@ -151,6 +178,16 @@ def train_vq_codebook(args):
                     total_loss += loss.item()
                     total_commit_loss += commit_loss.item() if isinstance(commit_loss, torch.Tensor) else commit_loss
                     num_batches += 1
+                    global_step += 1
+
+                    # Log to WandB every 100 steps
+                    if use_wandb and global_step % 100 == 0:
+                        wandb.log({
+                            "train/loss": loss.item(),
+                            "train/commit_loss": commit_loss.item() if isinstance(commit_loss, torch.Tensor) else commit_loss,
+                            "train/avg_loss": total_loss / num_batches,
+                            "global_step": global_step,
+                        })
 
                 pbar.set_postfix({
                     "loss": total_loss / max(num_batches, 1),
@@ -162,7 +199,17 @@ def train_vq_codebook(args):
                 continue
 
         avg_loss = total_loss / max(num_batches, 1)
-        print(f"Epoch {epoch+1}: avg_loss={avg_loss:.4f}")
+        avg_commit = total_commit_loss / max(num_batches, 1)
+        print(f"Epoch {epoch+1}: avg_loss={avg_loss:.4f}, avg_commit={avg_commit:.4f}")
+
+        # Log epoch metrics to WandB
+        if use_wandb:
+            wandb.log({
+                "epoch": epoch + 1,
+                "epoch/avg_loss": avg_loss,
+                "epoch/avg_commit_loss": avg_commit,
+                "epoch/num_batches": num_batches,
+            })
 
         # Save checkpoint
         if avg_loss < best_loss:
@@ -177,6 +224,10 @@ def train_vq_codebook(args):
             print(f"Saved checkpoint to {checkpoint_path}")
 
     print(f"Training complete. Best model saved to {args.output}")
+
+    # Finish WandB
+    if use_wandb:
+        wandb.finish()
 
     # Print codebook usage statistics
     vq_model.eval()
@@ -224,6 +275,16 @@ def main():
                         help="Save checkpoint every N epochs")
     parser.add_argument("--device", type=str, default="cuda",
                         help="Device to use")
+
+    # WandB arguments
+    parser.add_argument("--no-wandb", action="store_true",
+                        help="Disable WandB logging")
+    parser.add_argument("--wandb-project", type=str, default="songbloom-vq",
+                        help="WandB project name")
+    parser.add_argument("--wandb-entity", type=str, default=None,
+                        help="WandB entity/team name")
+    parser.add_argument("--wandb-name", type=str, default=None,
+                        help="WandB run name")
 
     args = parser.parse_args()
     train_vq_codebook(args)

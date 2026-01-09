@@ -1,4 +1,4 @@
-# 現状まとめ（2025-01-05 更新）
+# 現状まとめ（2025-01-09 更新）
 
 ## 0. 重要な注意事項
 
@@ -25,8 +25,9 @@
 ## 3. 実装済みの主な機能
 - MuQ + VQ スケッチ抽出:
   - `SongBloom/training/sketch.py` に ExternalSketchExtractor 実装。
-  - 24kHz resample → MuQ 埋め込み(1024) → VQ(codebook=16384)。
+  - 24kHz resample → MuQ 埋め込み(1024) → VQ(codebook=**129**)。
   - VAE latent と 25fps で長さ合わせ。
+  - **重要**: コードブックサイズは129（モデル埋め込み層が130クラス対応のため）。
 - データ分割:
   - JSONL を train/val に分割するユーティリティ追加。
   - Lightning に val dataloader を渡す対応。
@@ -71,49 +72,56 @@ uv run python -m SongBloom.training.prepare_jacappella \
 ```
 
 ## 5. VQ コードブック学習
-- VQ の学習は **CPU で実行**（MPS は複素数 dtype で失敗）。
+
+> **重要**: コードブックサイズは **129** を使用してください。
+> モデルの埋め込み層 (`skeleton_emb`) は130クラスのみサポートしています。
+> 16384クラスを使用すると、損失が ln(16384) ≈ 9.7 で停滞します。
 
 コマンド例:
 ```bash
-./.venv/bin/python -m SongBloom.training.train_vq \
-  --data-jsonl data/jacappella_prepared_ja/jacappella.jsonl \
-  --output-path data/vq/vq_16384.pt \
-  --steps 2000 \
-  --batch-size 1 \
-  --max-duration 10 \
-  --device cpu
+uv run python train_vq_codebook.py \
+  --data-dir data/japanese_singing_prepared/audio \
+  --output checkpoints/vq_codebook.pt \
+  --codebook-size 129 \
+  --epochs 10 \
+  --device cuda
 ```
 
-生成物:
-- `data/vq/vq_16384.pt`
+**注意:**
+- EMAベースのVQは5-10エポックで収束します（50エポックは不要）
+- CPU / CUDA 推奨（MPS は複素数演算でエラー）
 
 ## 6. 学習（微調整）
 ### 6.1 旧データでの学習
 - 出力先: `checkpoints/jacappella_muq_lora/`
 - 目的: baseline 動作確認
 
-### 6.2 日本語クリーニング後の学習（現状）
-- 出力先: `checkpoints/jacappella_muq_lora_ja/`
+### 6.2 japanese-singing-voice での学習（現状）
+- 出力先: `checkpoints/japanese_singing_v4/`
+- データセット: japanese-singing-voice (403曲, ~20時間)
 - 主要設定:
-  - batch=1 / max_epochs=5 / val_split=0.1
-  - `--sketch-mode muq` + `--muq-vq-path data/vq/vq_16384.pt`
+  - batch=1 / accumulate=8 / max_epochs=100
+  - `--sketch-mode muq` + `--muq-vq-path checkpoints/vq_codebook_129.pt`
+  - `--muq-codebook-size 129`
   - `--use-lora`（rank=16, alpha=32）
-- 学習済みチェックポイント:
-  - `checkpoints/jacappella_muq_lora_ja/last.ckpt`
+  - `--strategy ddp_find_unused_parameters_true`（DDP + LoRA必須）
 
-コマンド例:
+コマンド例（複数GPU）:
 ```bash
-WANDB_API_KEY=... ./.venv/bin/python train_japanese.py \
-  --data-jsonl data/jacappella_prepared_ja/jacappella.jsonl \
+uv run python train_japanese.py \
+  --data-jsonl data/japanese_singing_prepared/japanese_singing.jsonl \
   --val-split 0.1 \
-  --output-dir ./checkpoints/jacappella_muq_lora_ja \
+  --output-dir checkpoints/japanese_singing_v4 \
   --batch-size 1 \
-  --max-epochs 5 \
-  --device mps \
+  --accumulate-grad-batches 8 \
+  --max-epochs 100 \
+  --device cuda \
+  --devices 4 \
+  --strategy ddp_find_unused_parameters_true \
+  --precision 16-mixed \
   --sketch-mode muq \
-  --muq-vq-path data/vq/vq_16384.pt \
-  --muq-device cpu \
-  --require-vq-path \
+  --muq-vq-path checkpoints/vq_codebook_129.pt \
+  --muq-codebook-size 129 \
   --use-lora \
   --init-from-pretrained
 ```
@@ -140,29 +148,55 @@ PYTORCH_ENABLE_MPS_FALLBACK=1 DISABLE_FLASH_ATTN=1 \
 生成物:
 - `output/jacappella_finetune_ja_30s/*.wav`
 
-## 8. 現状の問題点（重要）
-1. **データ数が極端に少ない（26件）**
-   - 日本語歌唱を学習するには圧倒的に不足。
-2. **学習ステップ数が少なすぎる**
-   - max_epochs=5 でも約120 step 程度しか回らない。
-3. **LoRA 適用範囲が限定的**
-   - q/v/to_q/to_kv/to_qkvのみで、音声表現の変化が小さい。
-4. **歌詞が長文連結で構造が弱い**
-   - MusicXML から抽出した歌詞は句読点や区切りが少なく、音響対応が難しい。
-5. **ベースモデルが日本語歌唱に最適化されていない**
-   - phoneme は日本語だが、ベースが英語寄りのため発音が英語風になりやすい。
+## 8. 解決済みの問題
 
-## 9. 次にやるべきこと（優先順）
-1. **データ増量（最優先）**
-   - 日本語歌唱データの追加が必須。
-2. **学習ステップの増加**
-   - 5,000〜10,000 step 相当に増やす。
-3. **LoRAの更新範囲拡大**
-   - `--lora-train-all` を試す／rank増加。
-4. **歌詞区切りの改善**
-   - MusicXML からフレーズ境界を反映し、句読点を増やす。
+### 8.1 VQコードブックサイズの不整合（2025-01-09 解決）
 
-## 10. 参考ファイル
+**症状:**
+- 損失が ln(16384) ≈ 9.7 で停滞し、学習が全く進まない
+
+**根本原因:**
+- モデルの埋め込み層 (`skeleton_emb`) は `num_pitch=128` + 特殊トークンで **130クラス** のみサポート
+- VQコードブックが16384クラスだと、スケッチトークンが [0, 16383] の範囲になる
+- 埋め込み層の範囲外のためトークン予測が不可能
+
+**解決方法:**
+- VQコードブックを **129クラス** で再学習
+- `--muq-codebook-size 129` を指定
+
+**結果:**
+- 損失が 9.7 → **6.3-7.8** に改善
+- 学習が正常に進行
+
+### 8.2 DDP + LoRA の未使用パラメータエラー（2025-01-09 解決）
+
+**症状:**
+```
+RuntimeError: It looks like your LightningModule has parameters that were not used in producing the loss
+```
+
+**解決方法:**
+- `--strategy ddp_find_unused_parameters_true` を指定
+
+## 9. 現状の課題
+
+1. **学習継続の監視**
+   - 現在 Epoch 0 進行中、損失の収束を確認中
+2. **LoRA 適用範囲**
+   - q/v/to_q/to_kv/to_qkvのみ、必要に応じて拡大検討
+3. **生成品質の評価**
+   - 学習完了後に推論テストが必要
+
+## 10. 次にやるべきこと
+
+1. **学習完了を待つ**
+   - 現在のv4学習が完了するまで監視
+2. **推論テスト**
+   - 学習完了後にサンプル生成して品質確認
+3. **追加データ検討**
+   - 必要に応じてデータセット拡充
+
+## 11. 参考ファイル
 - 学習スクリプト: `train_japanese.py`
 - 推論スクリプト: `infer.py`
 - データ準備: `SongBloom/training/prepare_jacappella.py`
@@ -171,7 +205,7 @@ PYTORCH_ENABLE_MPS_FALLBACK=1 DISABLE_FLASH_ATTN=1 \
 
 ---
 
-## 11. 外部データセット調査
+## 12. 外部データセット調査
 
 ### japanese-singing-voice (HuggingFace)
 - URL: https://huggingface.co/datasets/tts-dataset/japanese-singing-voice
@@ -191,7 +225,7 @@ PYTORCH_ENABLE_MPS_FALLBACK=1 DISABLE_FLASH_ATTN=1 \
 
 ---
 
-## 12. 推奨学習環境
+## 13. 推奨学習環境
 
 ### GPU環境
 | 構成 | VRAM | 評価 |

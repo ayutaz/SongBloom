@@ -121,8 +121,13 @@ uv run python -m SongBloom.training.prepare_jacappella \
 
 ### MuQ + VQ のコードブック学習（必須）
 
-SongBloomの学習には、MuQ埋め込み用の VQコードブック（16384）が**必須**です。
+SongBloomの学習には、MuQ埋め込み用の VQコードブック（**129クラス**）が**必須**です。
 公式リポジトリではVQコードブックが公開されていないため、自前で学習する必要があります。
+
+> **重要**: コードブックサイズは **129** を使用してください。
+> モデルの埋め込み層は `num_pitch=128` + 特殊トークンで **130クラス** しかサポートしていません。
+> 16384クラスのコードブックを使用すると、トークンが範囲外（[0, 16383]）になり、
+> 損失が ln(16384) ≈ 9.7 付近で停滞して学習が進みません。
 
 #### Step 1: VQコードブック学習
 
@@ -130,16 +135,16 @@ SongBloomの学習には、MuQ埋め込み用の VQコードブック（16384）
 uv run python train_vq_codebook.py \
   --data-dir data/japanese_singing_prepared/audio \
   --output checkpoints/vq_codebook.pt \
-  --codebook-size 16384 \
-  --epochs 30 \
+  --codebook-size 129 \
+  --epochs 50 \
   --device cuda
 ```
 
 **主なオプション:**
 - `--data-dir`: 音声ファイルが含まれるディレクトリ
 - `--output`: 出力先パス
-- `--codebook-size`: コードブックサイズ（SongBloomは16384）
-- `--epochs`: 学習エポック数
+- `--codebook-size`: コードブックサイズ（**129を指定**）
+- `--epochs`: 学習エポック数（EMAなので5-10エポックで十分）
 - `--device`: cuda / cpu / mps
 - `--chunk-size`: 1回の処理フレーム数（メモリ不足時は減らす）
 - `--save-every`: チェックポイント保存間隔
@@ -147,24 +152,54 @@ uv run python train_vq_codebook.py \
 #### Step 2: VQコードブックを指定して学習
 
 ```bash
+# 単一GPU
 uv run python train_japanese.py \
   --data-jsonl data/japanese_singing_prepared/japanese_singing.jsonl \
   --sketch-mode muq \
   --muq-vq-path checkpoints/vq_codebook.pt \
+  --muq-codebook-size 129 \
   --val-split 0.1 \
   --device cuda \
+  --precision 16-mixed \
+  --use-lora \
+  --init-from-pretrained
+
+# 複数GPU (DDP)
+uv run python train_japanese.py \
+  --data-jsonl data/japanese_singing_prepared/japanese_singing.jsonl \
+  --sketch-mode muq \
+  --muq-vq-path checkpoints/vq_codebook.pt \
+  --muq-codebook-size 129 \
+  --val-split 0.1 \
+  --device cuda \
+  --devices 4 \
+  --strategy ddp_find_unused_parameters_true \
+  --precision 16-mixed \
   --use-lora \
   --init-from-pretrained
 ```
 
-※ MuQ の前処理で複素数演算が発生するため、MPS ではエラーになることがあります。
-その場合は `--device cpu` を指定してください。
+**注意事項:**
+- `--muq-codebook-size 129`: VQコードブックのサイズを明示的に指定
+- `--strategy ddp_find_unused_parameters_true`: LoRA使用時のDDPに必須
+- Tesla T4など bfloat16 非対応GPUでは `--precision 16-mixed` を使用
+- MuQ の前処理で複素数演算が発生するため、MPS ではエラーになることがあります。その場合は `--device cpu` を指定してください。
 
-#### VQコードブックなしで学習した場合の症状
+#### VQコードブックの問題で学習が停滞する症状
 
-- lossが ~10.5 付近で停滞（ランダム予測の ln(16384) ≈ 9.7 より悪い）
+**コードブックサイズが16384の場合（誤り）:**
+- lossが ~9.7-10.5 付近で停滞（ランダム予測の ln(16384) ≈ 9.7）
+- スケッチトークンが [0, 16383] の範囲になり、モデルの埋め込み層（130クラス）の範囲外
+- 学習が全く進まない
+
+**コードブックなしの場合:**
 - 警告メッセージ: `Warning: VQ codebook is not provided. Tokens will be random.`
 - 学習が進まず、生成品質が全く向上しない
+
+**正常な学習:**
+- コードブックサイズ129を使用
+- スケッチトークンが [0, 128] の範囲に収まる
+- lossが徐々に減少する（9.7以下へ）
 
 ## 追加したコード
 

@@ -148,7 +148,7 @@ uv run python train_japanese.py \
     --use-cache \
     --use-lora
 
-# CUDA GPU向け
+# CUDA GPU向け（単一GPU）
 uv run python train_japanese.py \
     --data-jsonl data/japanese_songs.jsonl \
     --val-split 0.05 \
@@ -157,7 +157,27 @@ uv run python train_japanese.py \
     --init-from-pretrained \
     --use-cache \
     --use-lora
+
+# CUDA 複数GPU（DDP）
+uv run python train_japanese.py \
+    --data-jsonl data/japanese_songs.jsonl \
+    --val-split 0.05 \
+    --device cuda \
+    --devices 4 \
+    --strategy ddp_find_unused_parameters_true \
+    --precision 16-mixed \
+    --init-from-pretrained \
+    --use-cache \
+    --use-lora \
+    --sketch-mode muq \
+    --muq-vq-path checkpoints/vq_codebook.pt \
+    --muq-codebook-size 129
 ```
+
+**重要な注意:**
+- LoRA + DDP では `--strategy ddp_find_unused_parameters_true` が必須
+- Tesla T4 は bfloat16 非対応のため `--precision 16-mixed` を使用
+- VQコードブックサイズは **129** を指定（16384は不可）
 
 ### 学習データフォーマット
 
@@ -203,13 +223,17 @@ uv add vector-quantize-pytorch  # VQコードブック
 > **重要**: `--sketch-mode muq` で学習する場合、VQコードブックの事前学習が必要です。
 > コードブックなしではスケッチトークンがランダムになり、モデルが学習できません。
 
+> **コードブックサイズは129を使用してください**
+> モデルの埋め込み層 (`skeleton_emb`) は `num_pitch=128` + 特殊トークンで **130クラス** のみサポートしています。
+> 16384クラスのコードブックを使用すると、トークンが範囲外になり、損失が ln(16384) ≈ 9.7 で停滞します。
+
 ```bash
-# Step 1: VQコードブックを学習
+# Step 1: VQコードブックを学習（サイズ129）
 uv run python train_vq_codebook.py \
     --data-dir data/japanese_singing_prepared/audio \
     --output checkpoints/vq_codebook.pt \
-    --codebook-size 16384 \
-    --epochs 30 \
+    --codebook-size 129 \
+    --epochs 50 \
     --device cuda
 
 # Step 2: VQコードブックを指定して学習
@@ -226,5 +250,12 @@ uv run python train_japanese.py \
 |------|------|
 | データセット | japanese-singing-voice (HuggingFace) |
 | 処理済みサンプル | 403曲 (~20時間) |
-| VQコードブック | 学習中 |
-| メイン学習 | VQコードブック完了待ち |
+| VQコードブック | ✅ 129クラスで学習完了 |
+| メイン学習 | ✅ 進行中（損失 6.3-7.8） |
+
+### 解決済みの問題
+
+**VQコードブックサイズの不整合（2025-01-09 解決）:**
+- 問題: VQコードブック16384クラスを使用 → 損失が ln(16384) ≈ 9.7 で停滞
+- 原因: モデルの埋め込み層 (`skeleton_emb`) は130クラスのみサポート
+- 解決: VQコードブックを129クラスで再学習 → 損失が6.3-7.8に改善

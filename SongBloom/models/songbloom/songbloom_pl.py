@@ -141,9 +141,9 @@ class SongBloom_PL(pl.LightningModule):
         flow_loss = F.mse_loss(output.nar_pred, output.nar_target)
         loss = ar_loss + self.lambda_flow * flow_loss
 
-        self.log("train/loss", loss, prog_bar=True)
-        self.log("train/ar_loss", ar_loss, prog_bar=False)
-        self.log("train/flow_loss", flow_loss, prog_bar=False)
+        self.log("train/loss", loss, prog_bar=True, sync_dist=True)
+        self.log("train/ar_loss", ar_loss, prog_bar=False, sync_dist=True)
+        self.log("train/flow_loss", flow_loss, prog_bar=False, sync_dist=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -162,9 +162,9 @@ class SongBloom_PL(pl.LightningModule):
         flow_loss = F.mse_loss(output.nar_pred, output.nar_target)
         loss = ar_loss + self.lambda_flow * flow_loss
 
-        self.log("val/loss", loss, prog_bar=True)
-        self.log("val/ar_loss", ar_loss, prog_bar=False)
-        self.log("val/flow_loss", flow_loss, prog_bar=False)
+        self.log("val/loss", loss, prog_bar=True, sync_dist=True)
+        self.log("val/ar_loss", ar_loss, prog_bar=False, sync_dist=True)
+        self.log("val/flow_loss", flow_loss, prog_bar=False, sync_dist=True)
         return loss
 
     def configure_optimizers(self):

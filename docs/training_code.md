@@ -74,8 +74,14 @@ uv run python train_japanese.py \
 - `--wandb-project` / `--wandb-entity` / `--wandb-name` / `--wandb-mode` : W&B設定
 - `--use-lora` : LoRAを有効化（メモリ削減）
 - `--lora-rank` / `--lora-alpha` / `--lora-dropout` : LoRAハイパーパラメータ
-- `--lora-target-modules` : LoRAを当てるモジュール名（カンマ区切り）
+- `--lora-target-modules` : LoRAを当てるモジュール名（カンマ区切り、**AR Transformerのみ推奨**）
 - `--lora-train-all` : LoRA以外も学習（通常はLoRAのみ学習）
+
+> **LoRAターゲットは `q_proj,v_proj`（ARのみ）を使用してください**
+>
+> NAR DiT のレイヤー (`to_q`, `to_kv`, `to_qkv`) を含めると、**ボーカル生成能力が破壊されます**。
+> SongBloomではAR Transformerがスケッチトークン予測、NAR DiTが音声詳細生成（ボーカル含む）を担当しており、
+> NAR DiTのAttentionレイヤーをLoRAで変更すると学習済みのボーカル生成パターンが失われます。
 
 ### JSONL分割ユーティリティ
 

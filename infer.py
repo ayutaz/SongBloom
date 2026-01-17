@@ -76,7 +76,8 @@ def main():
     parser.add_argument(
         "--lora-target-modules",
         type=str,
-        default="q_proj,v_proj,to_q,to_kv,to_qkv",
+        default="q_proj,v_proj",
+        help="LoRA target modules (AR only; NAR DiT targets break vocal generation)",
     )
     args = parser.parse_args()
 

@@ -253,7 +253,33 @@ uv run python train_japanese.py \
 | VQコードブック | ✅ 129クラスで学習完了 |
 | メイン学習 | ✅ 進行中（損失 6.3-7.8） |
 
+### LoRA設定の重要な注意
+
+> **LoRAターゲットはARのみ（`q_proj,v_proj`）を指定してください**
+
+SongBloomは2つのコンポーネントで構成されています:
+
+| コンポーネント | 役割 | Attentionレイヤー |
+|----------------|------|-------------------|
+| AR Transformer (Llama) | スケッチトークン予測 | `q_proj`, `k_proj`, `v_proj`, `o_proj` |
+| NAR DiT | 音声詳細生成（ボーカル含む） | `to_q`, `to_kv`, `to_qkv` |
+
+**NAR DiT のレイヤー (`to_q`, `to_kv`, `to_qkv`) を LoRA 対象に含めると、ボーカル生成能力が破壊されます。**
+
+```bash
+# 推奨（ARのみ）
+--lora-target-modules "q_proj,v_proj"
+
+# 非推奨（ボーカル生成が壊れる）
+--lora-target-modules "q_proj,v_proj,to_q,to_kv,to_qkv"
+```
+
 ### 解決済みの問題
+
+**LoRAターゲットモジュールの問題（2025-01-17 解決）:**
+- 問題: `to_q,to_kv,to_qkv` をLoRA対象に含めると、ボーカルが全く生成されない
+- 原因: NAR DiT（拡散モデル）がボーカル生成を担当しており、これを変更するとボーカル生成パターンが壊れる
+- 解決: LoRAターゲットを `q_proj,v_proj`（ARのみ）に変更
 
 **VQコードブックサイズの不整合（2025-01-09 解決）:**
 - 問題: VQコードブック16384クラスを使用 → 損失が ln(16384) ≈ 9.7 で停滞

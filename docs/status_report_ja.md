@@ -1,4 +1,4 @@
-# 現状まとめ（2025-01-09 更新）
+# 現状まとめ（2025-01-17 更新）
 
 ## 0. 重要な注意事項
 
@@ -178,21 +178,48 @@ RuntimeError: It looks like your LightningModule has parameters that were not us
 **解決方法:**
 - `--strategy ddp_find_unused_parameters_true` を指定
 
+### 8.3 LoRAターゲットモジュールによるボーカル消失（2025-01-17 解決）
+
+**症状:**
+- Fine-tuned モデルで推論すると、BGMは生成されるがボーカルが全く生成されない
+- Epoch 36 から既に問題が発生（学習初期から）
+
+**根本原因:**
+SongBloomは2つのコンポーネントで構成されています:
+
+| コンポーネント | 役割 | Attentionレイヤー |
+|----------------|------|-------------------|
+| AR Transformer (Llama) | スケッチトークン予測 | `q_proj`, `v_proj` |
+| NAR DiT | 音声詳細生成（**ボーカル含む**） | `to_q`, `to_kv`, `to_qkv` |
+
+NAR DiT のAttentionレイヤーを LoRA で変更すると、事前学習で獲得したボーカル生成パターンが破壊されます。
+
+**解決方法:**
+- LoRAターゲットを `q_proj,v_proj`（AR Transformerのみ）に変更
+- `to_q`, `to_kv`, `to_qkv`（NAR DiT）は対象から除外
+
+```bash
+# 推奨（ARのみ）
+--lora-target-modules "q_proj,v_proj"
+
+# 非推奨（ボーカル生成が壊れる）
+--lora-target-modules "q_proj,v_proj,to_q,to_kv,to_qkv"
+```
+
 ## 9. 現状の課題
 
-1. **学習継続の監視**
-   - 現在 Epoch 0 進行中、損失の収束を確認中
-2. **LoRA 適用範囲**
-   - q/v/to_q/to_kv/to_qkvのみ、必要に応じて拡大検討
-3. **生成品質の評価**
-   - 学習完了後に推論テストが必要
+1. **LoRA + AR-only での再学習**
+   - LoRAターゲットを `q_proj,v_proj` に変更して再学習が必要
+   - NAR DiTを対象外にすることでボーカル生成が保持される見込み
+2. **生成品質の評価**
+   - 再学習後に推論テストが必要
 
 ## 10. 次にやるべきこと
 
-1. **学習完了を待つ**
-   - 現在のv4学習が完了するまで監視
+1. **AR-only LoRAで再学習**
+   - `--lora-target-modules "q_proj,v_proj"` で学習を実行
 2. **推論テスト**
-   - 学習完了後にサンプル生成して品質確認
+   - 10エポックごとにサンプル生成してボーカルの有無を確認
 3. **追加データ検討**
    - 必要に応じてデータセット拡充
 

@@ -188,7 +188,8 @@ def main():
     parser.add_argument(
         "--lora-target-modules",
         type=str,
-        default="q_proj,v_proj,to_q,to_kv,to_qkv",
+        default="q_proj,v_proj",
+        help="LoRA target modules (AR only recommended; NAR DiT targets to_q/to_kv/to_qkv break vocal generation)",
     )
     parser.add_argument("--lora-train-all", action="store_true")
 

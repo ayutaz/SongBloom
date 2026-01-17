@@ -489,10 +489,11 @@ class AudioAutoencoder(nn.Module):
             total_size = latents.shape[2]
             batch_size = latents.shape[0]
             chunks = []
+            i = 0
             for i in range(0, total_size - chunk_size + 1, hop_size):
                 chunk = latents[:,:,i:i+chunk_size]
                 chunks.append(chunk)
-            if i+chunk_size != total_size:
+            if not chunks or i+chunk_size != total_size:
                 # Final chunk
                 chunk = latents[:,:,-chunk_size:]
                 chunks.append(chunk)
